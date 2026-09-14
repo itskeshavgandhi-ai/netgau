@@ -1,0 +1,312 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ *
+ * Every visual property the user can change is a CSS custom property
+ * driven by applySettings(). Nothing here is hard-coded to one look.
+ * ------------------------------------------------------------------ */
+:root {
+  --ng-accent: #22d3ee;
+  --ng-opacity: 0.62;
+  --ng-blur: 26px;
+  --ng-radius: 18px;
+  --ng-font-ui: 'Inter Variable';
+  --ng-font-display: 'Space Grotesk Variable';
+  --ng-font-mono: 'JetBrains Mono Variable';
+  --ng-font-scale: 1;
+  --ng-font-weight: 400;
+  --ng-tracking: -0.01em;
+  --ng-glow: 1;
+  --ng-noise: 0.5;
+
+  --ng-ink: #eaf0ff;
+  --ng-muted: #93a0bf;
+  --ng-faint: #64708c;
+  --ng-base: 7 11 22;
+  --ng-hairline: 255 255 255;
+
+  font-size: calc(16px * var(--ng-font-scale));
+}
+
+:root[data-theme='light'] {
+  --ng-ink: #0b1120;
+  --ng-muted: #4a5670;
+  --ng-faint: #6b7893;
+  --ng-base: 255 255 255;
+  --ng-hairline: 8 12 24;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* The window itself is transparent — the OS paints acrylic/mica behind us. */
+  background: transparent;
+  color: var(--ng-ink);
+  font-family: var(--ng-font-ui), system-ui, sans-serif;
+  font-weight: var(--ng-font-weight);
+  letter-spacing: var(--ng-tracking);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Only in browser preview mode: give the glass something to sit on. */
+body[data-simulated='true'] {
+  background:
+    radial-gradient(120% 90% at 15% 0%, #12324f 0%, transparent 55%),
+    radial-gradient(100% 80% at 90% 100%, #2a1a52 0%, transparent 60%),
+    #05070d;
+  overflow: auto;
+  user-select: text;
+}
+
+.num {
+  font-family: var(--ng-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.display {
+  font-family: var(--ng-font-display);
+}
+
+/* ------------------------------ surfaces ------------------------------ */
+.ng-surface {
+  position: relative;
+  border-radius: var(--ng-radius);
+  background:
+    linear-gradient(
+      155deg,
+      rgb(var(--ng-hairline) / calc(0.09 * var(--ng-opacity))) 0%,
+      rgb(var(--ng-hairline) / calc(0.02 * var(--ng-opacity))) 46%,
+      rgb(var(--ng-hairline) / calc(0.05 * var(--ng-opacity))) 100%
+    ),
+    rgb(var(--ng-base) / var(--ng-opacity));
+  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  border: 1px solid rgb(var(--ng-hairline) / 0.1);
+  box-shadow:
+    0 1px 0 0 rgb(var(--ng-hairline) / 0.08) inset,
+    0 30px 80px -40px rgb(0 0 0 / 0.95);
+  overflow: hidden;
+}
+
+.ng-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(var(--ng-noise) * 0.35);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+:root[data-noise='false'] .ng-surface::after {
+  display: none;
+}
+
+.ng-panel {
+  border-radius: calc(var(--ng-radius) * 0.7);
+  background: rgb(var(--ng-hairline) / 0.035);
+  border: 1px solid rgb(var(--ng-hairline) / 0.07);
+}
+
+.ng-glow {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  pointer-events: none;
+  background: radial-gradient(60% 60% at 50% 0%, var(--ng-accent), transparent 70%);
+  opacity: calc(var(--ng-glow) * 0.22);
+  filter: blur(30px);
+}
+
+.drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ------------------------------ controls ------------------------------ */
+.ng-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 99px;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgb(var(--ng-hairline) / 0.12);
+  background: rgb(var(--ng-hairline) / 0.05);
+  color: var(--ng-ink);
+  transition:
+    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease;
+}
+
+.ng-btn:hover {
+  background: rgb(var(--ng-hairline) / 0.1);
+  border-color: rgb(var(--ng-hairline) / 0.22);
+}
+
+.ng-btn:active {
+  transform: scale(0.97);
+}
+
+.ng-btn-accent {
+  color: #04060d;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--ng-accent) 92%, white), color-mix(in oklab, var(--ng-accent) 55%, #a78bfa));
+  border-color: transparent;
+  box-shadow: 0 10px 30px -14px var(--ng-accent);
+}
+
+.ng-btn-accent:hover {
+  box-shadow: 0 16px 40px -14px var(--ng-accent);
+}
+
+.ng-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 99px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ng-muted);
+  background: rgb(var(--ng-hairline) / 0.05);
+  border: 1px solid rgb(var(--ng-hairline) / 0.08);
+}
+
+.ng-input,
+.ng-select {
+  width: 100%;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--ng-ink);
+  background: rgb(0 0 0 / 0.25);
+  border: 1px solid rgb(var(--ng-hairline) / 0.12);
+  outline: none;
+}
+
+:root[data-theme='light'] .ng-input,
+:root[data-theme='light'] .ng-select {
+  background: rgb(255 255 255 / 0.7);
+}
+
+.ng-input:focus,
+.ng-select:focus {
+  border-color: color-mix(in oklab, var(--ng-accent) 60%, transparent);
+}
+
+.ng-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ng-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--ng-accent), rgb(var(--ng-hairline) / 0.16));
+}
+
+.ng-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+}
+
+.ng-toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 99px;
+  background: rgb(var(--ng-hairline) / 0.14);
+  border: 1px solid rgb(var(--ng-hairline) / 0.1);
+  cursor: pointer;
+  transition: background 200ms ease;
+  flex: none;
+}
+
+.ng-toggle[data-on='true'] {
+  background: color-mix(in oklab, var(--ng-accent) 75%, transparent);
+}
+
+.ng-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ng-toggle[data-on='true']::after {
+  transform: translateX(16px);
+}
+
+.ng-scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ng-hairline) / 0.2) transparent;
+}
+
+.ng-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ng-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--ng-hairline) / 0.16);
+  border-radius: 99px;
+}
+
+@keyframes ng-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.ng-live-dot {
+  animation: ng-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

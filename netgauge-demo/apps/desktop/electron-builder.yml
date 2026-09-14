@@ -1,0 +1,51 @@
+appId: app.netgauge.desktop
+productName: NetGauge
+copyright: Copyright © 2026 NetGauge contributors
+
+directories:
+  output: release
+  buildResources: build-resources
+
+files:
+  - build/**/*
+  - package.json
+
+asar: true
+compression: normal
+
+win:
+  icon: build-resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: NetGauge
+  artifactName: NetGauge-Setup-${version}.${ext}
+
+portable:
+  artifactName: NetGauge-Portable-${version}.${ext}
+
+mac:
+  category: public.app-category.utilities
+  icon: build-resources/icon.icns
+  target: [dmg, zip]
+  artifactName: NetGauge-${version}-${arch}.${ext}
+
+linux:
+  category: Network
+  icon: build-resources/icon.png
+  target: [AppImage, deb]
+  artifactName: NetGauge-${version}-${arch}.${ext}
+
+publish:
+  provider: github
+  owner: thekeshavgandhi-dev
+  repo: netgauge-demo
