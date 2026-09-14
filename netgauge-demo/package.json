@@ -1,0 +1,35 @@
+{
+  "name": "netgauge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NetGauge — a glassy network monitor that lives in the Windows tray, plus a Speedtest-class web client.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev:web": "npm run dev -w @netgauge/web",
+    "dev:app": "npm run dev -w @netgauge/desktop",
+    "build": "npm run build -w @netgauge/web && npm run build -w @netgauge/desktop",
+    "build:web": "npm run build -w @netgauge/web",
+    "build:app": "npm run build -w @netgauge/desktop",
+    "start:web": "npm run start -w @netgauge/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "icons": "node scripts/make-icons.mjs",
+    "dist:win": "npm run dist:win -w @netgauge/desktop"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.7.2",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@netgauge/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared speed-test engine, throughput math, interface counter parsers and tray-icon rasterizer for NetGauge.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
