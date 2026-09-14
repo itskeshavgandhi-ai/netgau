@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, screen, session } from 'electron';
 import { formatSpeed } from '@netgauge/core';
 import { registerIpc } from './ipc';
 import { Sampler, createReaderForPlatform, type CounterReader } from './sampler';
@@ -196,7 +196,39 @@ if (!gotLock) {
 
   app.on('second-instance', () => openView('studio'));
 
+  /**
+   * The renderer is served from file:// (origin "null") in a packaged build, and the
+   * speed test talks to a remote server (Cloudflare or a custom NetGauge host). The
+   * browser-side CORS check therefore fails with a bare "Failed to fetch" even though
+   * the server is perfectly reachable. This app is the only thing that can load into
+   * these windows, so the main process relaxes CORS for the speed endpoints only.
+   */
+  const allowSpeedTestCors = () => {
+    const filter = { urls: ['https://*/*', 'http://*/*'] };
+    const isSpeedUrl = (url: string) => /\/(__down|__up|meta|api\/speed\/)/.test(url) || url.includes('speed.cloudflare.com');
+    session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+      if (!isSpeedUrl(details.url)) return callback({});
+      const headers = { ...details.requestHeaders };
+      delete headers.Origin;
+      delete headers.origin;
+      callback({ requestHeaders: headers });
+    });
+    session.defaultSession.webRequest.onHeadersReceived(filter, (details, callback) => {
+      if (!isSpeedUrl(details.url)) return callback({});
+      const headers: Record<string, string | string[]> = { ...(details.responseHeaders ?? {}) };
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase().startsWith('access-control-')) delete headers[key];
+      }
+      headers['Access-Control-Allow-Origin'] = ['*'];
+      headers['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, HEAD'];
+      headers['Access-Control-Allow-Headers'] = ['*'];
+      headers['Access-Control-Expose-Headers'] = ['*'];
+      callback({ responseHeaders: headers, statusLine: details.method === 'OPTIONS' ? 'HTTP/1.1 204 No Content' : details.statusLine });
+    });
+  };
+
   app.whenReady().then(async () => {
+    allowSpeedTestCors();
     const file = settingsPath(app.getPath('userData'));
     const loaded = loadSettings(file);
     store = new SettingsStore(file, loaded);
@@ -213,7 +245,12 @@ if (!gotLock) {
       onSample: broadcastSample,
     });
 
-    await dock.refresh(true);
+    // Do NOT await the taskbar probe here. On Windows it spawns PowerShell + UI
+    // Automation and can take several seconds; blocking on it meant no tray icon and
+    // no window until it finished, which looked like the app had hung on launch.
+    // The cheap work-area estimate is applied synchronously and the real probe
+    // refines the widget position when it lands.
+    dock.seed();
 
     tray = new NetGaugeTray(settings, {
       openStudio: () => openView('studio'),
@@ -260,18 +297,31 @@ if (!gotLock) {
       widgetResize: (width, height) => widget.resizeToContent(width, height),
     });
 
+    // Dragging a slider in Studio fires a settings change per frame. Rebuilding a
+    // native menu and re-laying-out the widget window on every one of them is what
+    // made the whole app stutter while adjusting settings, so both are coalesced.
+    let menuTimer: ReturnType<typeof setTimeout> | null = null;
+    let applyTimer: ReturnType<typeof setTimeout> | null = null;
     store.onChange((next) => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.send(CHANNELS.settingsChanged, next);
       }
-      widget.apply(next);
       sampler.setOptions({
         intervalMs: next.monitor.sampleMs,
         adapter: next.monitor.adapter,
         includeVirtual: next.monitor.includeVirtual,
         smoothing: next.monitor.smoothing,
       });
-      tray?.rebuildMenu();
+      if (applyTimer) clearTimeout(applyTimer);
+      applyTimer = setTimeout(() => {
+        applyTimer = null;
+        widget.apply(settings());
+      }, 40);
+      if (menuTimer) clearTimeout(menuTimer);
+      menuTimer = setTimeout(() => {
+        menuTimer = null;
+        tray?.rebuildMenu();
+      }, 200);
     });
 
     // Restore the login-item state so the tray checkbox is never a lie.

@@ -102,8 +102,6 @@ body[data-simulated='true']:not([data-view='widget']) {
       rgb(var(--ng-hairline) / calc(0.05 * var(--ng-surface-alpha))) 100%
     ),
     rgb(var(--ng-base) / var(--ng-surface-alpha));
-  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
-  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
   border: 1px solid rgb(var(--ng-hairline) / 0.1);
   box-shadow:
     0 1px 0 0 rgb(var(--ng-hairline) / 0.08) inset,
@@ -111,13 +109,21 @@ body[data-simulated='true']:not([data-view='widget']) {
   overflow: hidden;
 }
 
+/* The blur only makes sense when something shows through. The Studio is opaque, so
+   running a full-window backdrop blur there was pure GPU cost — on machines without
+   hardware acceleration it made the whole window stutter. Only the browser preview
+   (which sits on a gradient) and the widget keep it. */
+body[data-simulated='true'] .ng-surface {
+  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+}
+
 .ng-surface::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: calc(var(--ng-noise) * 0.35);
-  mix-blend-mode: overlay;
+  opacity: calc(var(--ng-noise) * 0.18);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
@@ -136,9 +142,10 @@ body[data-simulated='true']:not([data-view='widget']) {
   inset: -30% -10% auto -10%;
   height: 70%;
   pointer-events: none;
-  background: radial-gradient(60% 60% at 50% 0%, var(--ng-accent), transparent 70%);
-  opacity: calc(var(--ng-glow) * 0.22);
-  filter: blur(30px);
+  /* A soft gradient instead of `filter: blur()`: a blurred 70%-height layer was
+     re-rasterised on every live-sample re-render. */
+  background: radial-gradient(60% 60% at 50% 0%, var(--ng-accent) 0%, transparent 65%);
+  opacity: calc(var(--ng-glow) * 0.2);
 }
 
 .drag {
@@ -369,23 +376,48 @@ body[data-view='widget'] {
 .ng-taskbar-strip {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.9rem;
   height: 100%;
-  padding: 0 0.6rem;
+  padding: 0 0.5rem;
   white-space: nowrap;
   cursor: default;
+  font-family: var(--ng-font-display), var(--ng-font-ui), system-ui, sans-serif;
 }
 
 .ng-taskbar-metric {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.22rem;
+  gap: 0.28rem;
   line-height: 1;
 }
 
+.ng-taskbar-arrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+
 .ng-taskbar-value {
+  font-family: var(--ng-font-display), var(--ng-font-ui), system-ui, sans-serif;
+  font-size: 0.98rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  color: var(--ng-ink);
+}
+
+.ng-taskbar-unit {
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ng-muted);
+}
+
+/* Transparent strip over a taskbar: a crisp text shadow keeps the numbers legible
+   over light *and* dark taskbars without painting a panel behind them. */
+.ng-widget[data-material='transparent'] .ng-taskbar-value {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 8px rgb(0 0 0 / 0.45);
 }
 
 .ng-divider {

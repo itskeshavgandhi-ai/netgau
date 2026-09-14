@@ -73,13 +73,6 @@ export default function Gauge({ valueBps, progress = 0, phase = 'idle', children
             <stop offset="55%" stopColor="#8b5cf6" />
             <stop offset="100%" stopColor="#f0abfc" />
           </linearGradient>
-          <filter id={`${gradientId}-glow`} x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
 
         {/* track */}
@@ -134,17 +127,28 @@ export default function Gauge({ valueBps, progress = 0, phase = 'idle', children
           />
         )}
 
-        {/* value arc */}
+        {/* value arc — the halo is a wider, translucent copy of the arc rather than an
+            SVG blur filter, which re-rendered at 10 Hz during the test and stuttered
+            the gauge on phones. */}
         {fraction > 0.001 && (
-          <path
-            d={arcPath(RADIUS, START, angle)}
-            fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={STROKE}
-            strokeLinecap="round"
-            filter={`url(#${gradientId}-glow)`}
-            style={{ transition: isRunning ? 'none' : 'd 400ms ease' }}
-          />
+          <>
+            <path
+              d={arcPath(RADIUS, START, angle)}
+              fill="none"
+              stroke={`url(#${gradientId})`}
+              strokeWidth={STROKE + 10}
+              strokeLinecap="round"
+              opacity={0.18}
+            />
+            <path
+              d={arcPath(RADIUS, START, angle)}
+              fill="none"
+              stroke={`url(#${gradientId})`}
+              strokeWidth={STROKE}
+              strokeLinecap="round"
+              style={{ transition: isRunning ? 'none' : 'd 400ms ease' }}
+            />
+          </>
         )}
 
         {/* tip dot */}

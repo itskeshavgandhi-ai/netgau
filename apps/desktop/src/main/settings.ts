@@ -18,10 +18,29 @@ export function loadSettings(file: string): LoadResult {
     if (!existsSync(file)) return { settings: DEFAULT_SETTINGS };
     const raw = readFileSync(file, 'utf8');
     if (!raw.trim()) return { settings: DEFAULT_SETTINGS };
-    return { settings: sanitizeSettings(JSON.parse(raw)) };
+    return { settings: sanitizeSettings(migrate(JSON.parse(raw))) };
   } catch (error) {
     return { settings: DEFAULT_SETTINGS, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/**
+ * One-time migration for files written before the text-only taskbar strip: the old
+ * defaults turned on the sparkline/peak/adapter extras and used a 300 px strip.
+ * Anything the user changed on purpose (marked by `widgetStyle`) is left alone.
+ */
+export function migrate(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const obj = raw as Record<string, unknown> & { widget?: Record<string, unknown>; appearance?: Record<string, unknown> };
+  if (obj.widgetStyle === 2) return obj;
+  const widget = { ...(obj.widget ?? {}) };
+  if (widget.showSparkline === true && widget.showPeak === true && widget.showAdapter === true) {
+    widget.showSparkline = false;
+    widget.showPeak = false;
+    widget.showAdapter = false;
+    if (widget.width === 300) widget.width = DEFAULT_SETTINGS.widget.width;
+  }
+  return { ...obj, widget, widgetStyle: 2 };
 }
 
 export function saveSettings(file: string, settings: NetGaugeSettings): void {
@@ -29,7 +48,8 @@ export function saveSettings(file: string, settings: NetGaugeSettings): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   // Write-then-rename would be safer against power loss; a plain write is fine here
   // because the file is tiny and always re-sanitised on load.
-  writeFileSync(file, JSON.stringify(settings, null, 2), 'utf8');
+  // `widgetStyle` marks the file as post-migration (see `migrate`); it is not a setting.
+  writeFileSync(file, JSON.stringify({ ...settings, widgetStyle: 2 }, null, 2), 'utf8');
 }
 
 /** Small observable store used by the main process. */

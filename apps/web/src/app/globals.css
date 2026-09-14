@@ -91,8 +91,10 @@
     position: relative;
     background:
       linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.04));
-    backdrop-filter: blur(26px) saturate(170%);
-    -webkit-backdrop-filter: blur(26px) saturate(170%);
+    /* A modest blur: 26px + saturate across a dozen stacked panels was the single
+       biggest cause of jank on integrated GPUs and phones. */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--color-line);
     box-shadow:
       0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
@@ -100,10 +102,10 @@
   }
 
   .glass-soft {
-    background: rgba(255, 255, 255, 0.035);
+    /* No backdrop blur here: these are small and numerous, and they usually sit on
+       top of a .glass panel that already blurs. */
+    background: rgba(255, 255, 255, 0.045);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
   }
 
   .hairline {
@@ -235,23 +237,34 @@
   width: 60vmax;
   height: 60vmax;
   border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.42;
+  /* The soft edge comes from the gradient itself. `filter: blur(90px)` on two
+     screen-sized, continuously animating layers re-rasterised a huge surface every
+     frame and was what made the page feel frozen on open. */
+  opacity: 0.55;
   will-change: transform;
 }
 
 .aurora::before {
   top: -22vmax;
   left: -12vmax;
-  background: radial-gradient(circle at 30% 30%, #0891b2, transparent 62%);
+  background: radial-gradient(circle at 40% 40%, rgba(8, 145, 178, 0.9) 0%, rgba(8, 145, 178, 0.35) 30%, transparent 62%);
   animation: drift-a 26s ease-in-out infinite alternate;
 }
 
 .aurora::after {
   bottom: -26vmax;
   right: -16vmax;
-  background: radial-gradient(circle at 60% 40%, #6d28d9, transparent 62%);
+  background: radial-gradient(circle at 55% 45%, rgba(109, 40, 217, 0.9) 0%, rgba(109, 40, 217, 0.35) 30%, transparent 62%);
   animation: drift-b 32s ease-in-out infinite alternate;
+}
+
+/* Phones: keep the ambience, drop the animation entirely. */
+@media (max-width: 640px), (prefers-reduced-motion: reduce) {
+  .aurora::before,
+  .aurora::after {
+    animation: none;
+    will-change: auto;
+  }
 }
 
 .aurora-grid {

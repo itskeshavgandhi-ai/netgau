@@ -88,7 +88,10 @@ describe('surface opacity contract', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Mbps'));
     expect(screen.queryByText('Appearance')).toBeNull();
     expect(document.querySelector('.ng-taskbar-strip')).toBeTruthy();
-    expect(document.querySelector('[aria-label="Pause monitoring"]')).toBeTruthy();
+    // Text-only strip: two live readouts and no controls, chips or dividers.
+    expect(document.querySelectorAll('.ng-taskbar-metric')).toHaveLength(2);
+    expect(document.querySelector('.ng-taskbar-strip button')).toBeNull();
+    expect(document.querySelector('.ng-taskbar-strip .ng-chip')).toBeNull();
   });
 });
 
@@ -99,8 +102,8 @@ describe('browser-preview docking', () => {
     const style = previewDockStyle(base());
     // 120px is where the Start cluster's outer edge sits; the strip is placed a
     // further `dockGap` to its left.
-    expect(style.left).toBe('calc(50% - 120px - 8px - 300px + 0px)');
-    expect(style.width).toBe(300);
+    expect(style.left).toBe('calc(50% - 120px - 8px - 210px + 0px)');
+    expect(style.width).toBe(210);
     expect(style.height).toBe(34);
     expect(style.top).toBe(7); // centred in the 48px taskbar
   });
@@ -116,8 +119,8 @@ describe('browser-preview docking', () => {
     nudged.widget.scale = 1.5;
     nudged.widget.dockOffsetY = 3;
     const style = previewDockStyle(nudged);
-    expect(style.left).toBe('calc(50% - 120px - 16px - 450px + 40px)');
-    expect(style.width).toBe(450);
+    expect(style.left).toBe('calc(50% - 120px - 16px - 315px + 40px)');
+    expect(style.width).toBe(315);
     expect(style.height).toBe(51);
     expect(style.top).toBe(1.5);
   });

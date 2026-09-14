@@ -319,13 +319,39 @@ export class TaskbarDock {
   }
 
   /**
+   * Synchronous, probe-free snapshot from the work area. Gives the widget a sane
+   * position immediately at startup without waiting on PowerShell.
+   */
+  seed(): TaskbarLayout {
+    if (!this.current) {
+      this.current = this.fromWorkArea();
+      this.options.onLayout?.(this.current);
+    }
+    return this.current;
+  }
+
+  /**
    * Refreshes the layout. `force` runs the UI Automation probe even if nothing looks
    * different (used by the "Detect taskbar" button in Studio).
+   *
+   * Only one probe runs at a time: the periodic timer, display events and the Studio
+   * button used to each spawn their own PowerShell, which piled up on slow machines.
    */
-  async refresh(force = false): Promise<TaskbarLayout> {
+  refresh(force = false): Promise<TaskbarLayout> {
+    if (this.inflight) return this.inflight;
+    this.inflight = this.doRefresh(force).finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  private inflight: Promise<TaskbarLayout> | null = null;
+
+  private async doRefresh(force: boolean): Promise<TaskbarLayout> {
     const base = this.fromWorkArea();
     const signature = `${base.rect.x},${base.rect.y},${base.rect.width},${base.rect.height},${base.autoHide}`;
-    const stale = Date.now() - this.lastProbeAt > 30_000;
+    // Re-probe rarely: each probe is a fresh PowerShell + UI Automation load (~1 s CPU).
+    const stale = Date.now() - this.lastProbeAt > 120_000;
     const shouldProbe = process.platform === 'win32' && (force || signature !== this.lastSignature || stale);
 
     if (shouldProbe && (force || !this.current || this.current.source !== 'uia' || stale || signature !== this.lastSignature)) {
