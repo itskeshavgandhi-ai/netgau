@@ -232,8 +232,10 @@ describe('window material mapping', () => {
     expect(withPlatform('linux', undefined, () => materialFor('solid')).transparent).toBe(false);
   });
 
-  it('uses vibrancy on macOS', () => {
-    expect(withPlatform('darwin', undefined, () => materialFor('transparent')).vibrancy).toBe('under-window');
+  it('uses vibrancy on macOS for the glass materials', () => {
+    expect(withPlatform('darwin', undefined, () => materialFor('acrylic')).vibrancy).toBe('under-window');
+    // 'transparent' means "no panel at all", so it must not drag a blur in with it.
+    expect(withPlatform('darwin', undefined, () => materialFor('transparent')).vibrancy).toBeUndefined();
   });
 
   it('falls back to a transparent surface on Linux', () => {

@@ -69,8 +69,27 @@ export class BrowserWindow {
   setSize = (width: number, height: number) => {
     this.size = [width, height];
   };
+  getSize = () => this.size;
+  setContentSize = (width: number, height: number) => {
+    this.size = [width, height];
+  };
+  getContentSize = () => this.size;
   getPosition = () => this.position;
+  setPosition = (x: number, y: number) => {
+    this.position = [x, y];
+  };
+  getBounds = () => ({
+    x: this.position[0] ?? 0,
+    y: this.position[1] ?? 0,
+    width: this.size[0] ?? 0,
+    height: this.size[1] ?? 0,
+  });
+  isVisible = () => this.shown;
+  showInactive = () => {
+    this.shown = true;
+  };
   setVisibleOnAllWorkspaces = () => undefined;
+  setFocusable = () => undefined;
   on = () => this;
   once = () => this;
 }
@@ -118,10 +137,33 @@ export const nativeImage = {
 };
 
 export const screen = {
-  getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 }, workAreaSize: { width: 1920, height: 1080 } }),
+  getPrimaryDisplay: () => ({
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+    workAreaSize: { width: 1920, height: 1040 },
+    scaleFactor: 1,
+  }),
+  getDisplayMatching: () => ({
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+    workAreaSize: { width: 1920, height: 1040 },
+    scaleFactor: 1,
+  }),
+  on: () => undefined,
 };
 
 export const shell = { openExternal: async () => true };
+
+export const nativeTheme = { shouldUseDarkColors: true, on: () => undefined };
+
+export class Notification {
+  static isSupported = () => true;
+  shown = false;
+  constructor(public readonly options: Record<string, unknown> = {}) {}
+  show = () => {
+    this.shown = true;
+  };
+}
 
 export const contextBridge = { exposeInMainWorld: () => undefined };
 
@@ -132,4 +174,4 @@ export const ipcRenderer = {
   send: () => undefined,
 };
 
-export default { app, BrowserWindow, Tray, ipcMain, Menu, nativeImage, screen, shell, contextBridge, ipcRenderer };
+export default { app, BrowserWindow, Tray, ipcMain, Menu, nativeImage, screen, shell, contextBridge, ipcRenderer, nativeTheme, Notification };

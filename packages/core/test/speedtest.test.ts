@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { SpeedTestAborted, SpeedTester, runSpeedTest, type SpeedProgress } from '@netgauge/core';
 
 /**

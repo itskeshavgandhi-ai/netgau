@@ -16,6 +16,10 @@ export function applySettings(settings: NetGaugeSettings, root: HTMLElement = do
   const style = root.style;
   style.setProperty('--ng-accent', a.accent);
   style.setProperty('--ng-opacity', String(a.opacity));
+  // The Studio is opaque no matter what the opacity slider says; only the widget
+  // honours it. `App` sets `data-view` on <body> before the first paint.
+  const view = typeof document !== 'undefined' ? document.body?.dataset.view : undefined;
+  style.setProperty('--ng-surface-alpha', view === 'widget' ? String(a.opacity) : '1');
   style.setProperty('--ng-blur', `${a.blur}px`);
   style.setProperty('--ng-radius', `${a.cornerRadius}px`);
   style.setProperty('--ng-font-ui', a.uiFont);

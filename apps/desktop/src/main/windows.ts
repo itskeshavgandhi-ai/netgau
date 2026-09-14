@@ -1,17 +1,17 @@
-import { BrowserWindow, screen, shell } from 'electron';
+import { BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { GlassMode, NetGaugeSettings, ViewName } from '../shared/bridge';
+import { widgetMetrics, type GlassMode, type NetGaugeSettings, type ViewName } from '../shared/bridge';
 
-const PRELOAD = join(__dirname, '../preload/index.js');
+export const PRELOAD_PATH = join(__dirname, '../preload/index.js');
 const RENDERER_HTML = join(__dirname, '../renderer/index.html');
 
-function rendererUrl(view: ViewName): string {
+export function rendererUrl(view: ViewName): string {
   const dev = process.env.NETGAUGE_DEV_SERVER;
   return dev ? `${dev.replace(/\/$/, '')}/#${view}` : `${pathToFileURL(RENDERER_HTML).href}#/${view}`;
 }
 
-interface MaterialOptions {
+export interface MaterialOptions {
   transparent: boolean;
   backgroundColor: string;
   backgroundMaterial?: 'none' | 'mica' | 'acrylic' | 'tabbed';
@@ -19,9 +19,12 @@ interface MaterialOptions {
 }
 
 /**
- * Maps the user's glass setting onto the right platform mechanism.
+ * Maps a glass setting onto the right platform mechanism.
+ *
  * Windows 11 gets a real compositor material; everywhere else we fall back to a
- * transparent surface that the renderer blurs itself.
+ * transparent surface that the renderer blurs itself (or paint a solid colour).
+ * Only the *widget* uses this — the Studio window is always opaque, because a window
+ * full of numbers must never be legible only through whatever is behind it.
  */
 export function materialFor(glass: GlassMode): MaterialOptions {
   // `process.getSystemVersion` is Electron-only (returns e.g. "11.0.22631").
@@ -32,17 +35,32 @@ export function materialFor(glass: GlassMode): MaterialOptions {
     if (glass === 'acrylic') return { transparent: false, backgroundColor: '#00000000', backgroundMaterial: 'acrylic' };
     if (glass === 'mica') return { transparent: false, backgroundColor: '#00000000', backgroundMaterial: 'mica' };
     if (glass === 'solid') return { transparent: false, backgroundColor: '#0b1120' };
-    return { transparent: false, backgroundColor: '#00000000', backgroundMaterial: 'none' };
+    return { transparent: true, backgroundColor: '#00000000' };
   }
-  if (process.platform === 'darwin' && glass !== 'solid') {
+  if (process.platform === 'darwin' && glass !== 'solid' && glass !== 'transparent') {
     return { transparent: true, backgroundColor: '#00000000', vibrancy: 'under-window' };
   }
   if (glass === 'solid') return { transparent: false, backgroundColor: '#0b1120' };
   return { transparent: true, backgroundColor: '#00000000' };
 }
 
+/** The widget's material. Kept separate so the studio can never inherit the transparency. */
+export function widgetMaterialFor(glass: GlassMode): MaterialOptions {
+  return materialFor(glass);
+}
+
+/** Opaque studio background for the active theme. */
+export function studioBackground(theme: NetGaugeSettings['appearance']['theme']): string {
+  if (theme === 'light') return '#eef1f7';
+  if (theme === 'system') {
+    const shouldUseDark = (nativeTheme as { shouldUseDarkColors?: boolean } | undefined)?.shouldUseDarkColors ?? true;
+    return shouldUseDark ? '#0b1120' : '#eef1f7';
+  }
+  return '#0b1120';
+}
+
 const basePreferences: Electron.WebPreferences = {
-  preload: PRELOAD,
+  preload: PRELOAD_PATH,
   contextIsolation: true,
   nodeIntegration: false,
   sandbox: false,
@@ -50,7 +68,6 @@ const basePreferences: Electron.WebPreferences = {
 };
 
 export function createStudioWindow(settings: NetGaugeSettings): BrowserWindow {
-  const material = materialFor(settings.appearance.glass);
   const win = new BrowserWindow({
     width: 1080,
     height: 740,
@@ -59,8 +76,12 @@ export function createStudioWindow(settings: NetGaugeSettings): BrowserWindow {
     show: false,
     frame: false,
     titleBarStyle: 'hidden',
-    ...material,
-    webPreferences: basePreferences,
+    // Always opaque. The user asked for it, and it also removes the whole class of
+    // "the window went black on wake" / "I can see my desktop through the numbers"
+    // problems that compositor materials bring on mixed hardware.
+    transparent: false,
+    backgroundColor: studioBackground(settings.appearance.theme),
+    webPreferences: { ...basePreferences },
   });
 
   win.once('ready-to-show', () => win.show());
@@ -72,36 +93,11 @@ export function createStudioWindow(settings: NetGaugeSettings): BrowserWindow {
   return win;
 }
 
-export function createWidgetWindow(settings: NetGaugeSettings): BrowserWindow {
-  const material = materialFor(settings.appearance.glass);
-  const width = Math.round(settings.widget.width * settings.widget.scale);
-  const height = Math.round(230 * settings.widget.scale);
+/** Where a free-floating widget should sit the first time it is shown. */
+export function defaultWidgetPosition(width: number, height: number): { x: number; y: number } {
   const { workArea } = screen.getPrimaryDisplay();
-
-  const win = new BrowserWindow({
-    width,
-    height,
-    x: settings.widget.position?.x ?? workArea.x + workArea.width - width - 24,
-    y: settings.widget.position?.y ?? workArea.y + 24,
-    frame: false,
-    resizable: true,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    hasShadow: false,
-    alwaysOnTop: settings.widget.alwaysOnTop,
-    ...material,
-    webPreferences: { ...basePreferences },
-  });
-
-  win.setAlwaysOnTop(settings.widget.alwaysOnTop, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  if (settings.widget.clickThrough) win.setIgnoreMouseEvents(true, { forward: true });
-  void win.loadURL(rendererUrl('widget'));
-  return win;
-}
-
-export function loadView(win: BrowserWindow, view: ViewName): void {
-  void win.loadURL(rendererUrl(view));
+  return {
+    x: Math.round(workArea.x + workArea.width - width - 24),
+    y: Math.round(workArea.y + workArea.height - height - 24),
+  };
 }

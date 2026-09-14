@@ -249,9 +249,15 @@ export class Sampler {
     return this.options.reader.read();
   }
 
+  /**
+   * Live-applies new options. The timer is only restarted when the interval really
+   * changed — restarting it on every settings keystroke (dragging a slider fires one
+   * per frame) used to starve the sampler and freeze the live numbers.
+   */
   setOptions(options: Partial<Omit<SamplerOptions, 'reader'>>): void {
+    const intervalChanged = options.intervalMs !== undefined && options.intervalMs !== this.options.intervalMs;
     this.options = { ...this.options, ...options };
-    if (this.timer) {
+    if (this.timer && intervalChanged) {
       clearInterval(this.timer);
       this.timer = setInterval(() => void this.tick(), this.options.intervalMs);
     }

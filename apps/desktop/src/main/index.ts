@@ -1,33 +1,66 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import { formatSpeed } from '@netgauge/core';
 import { registerIpc } from './ipc';
 import { Sampler, createReaderForPlatform, type CounterReader } from './sampler';
 import { SettingsStore, loadSettings, settingsPath } from './settings';
+import { TaskbarDock } from './taskbar';
 import { NetGaugeTray } from './tray';
-import { createStudioWindow, createWidgetWindow } from './windows';
-import { CHANNELS, mergeSettings, type LiveSample, type NetGaugeSettings, type ViewName, type WindowAction } from '../shared/bridge';
+import { createStudioWindow } from './windows';
+import { WidgetController } from './widget';
+import {
+  CHANNELS,
+  widgetMetrics,
+  type LiveSample,
+  type NetGaugeSettings,
+  type ViewName,
+  type WindowAction,
+} from '../shared/bridge';
 
 const isWindows = process.platform === 'win32';
+
+// Windows uses the AppUserModelID to group taskbar buttons and to allow notifications
+// from an unpackaged (portable) build. Without it, toasts silently never appear.
+if (isWindows) app.setAppUserModelId('app.netgauge.desktop');
+
 const gotLock = app.requestSingleInstanceLock();
 
 if (!gotLock) {
   app.quit();
 } else {
-  // A frameless transparent window needs the GPU compositor; disabling it here
-  // avoids the black-rectangle bug some Windows 10 machines hit on wake.
-  if (isWindows) app.commandLine.appendSwitch('disable-frame-rate-limit');
-
   let store: SettingsStore;
   let sampler: Sampler;
   let reader: CounterReader;
   let tray: NetGaugeTray;
   let studio: BrowserWindow | null = null;
-  let widget: BrowserWindow | null = null;
   let quitting = false;
   let lowSince = 0;
   let notified = false;
 
   const settings = () => store.get();
+
+  const dock = new TaskbarDock({
+    getSettings: settings,
+    onLayout: (layout) => {
+      // Cache the real Start-button rectangle so the estimate improves even before
+      // the next probe.
+      if (layout.startButton) {
+        const cached = settings().widget.startButton;
+        const next = layout.startButton;
+        if (!cached || cached.x !== next.x || cached.y !== next.y || cached.width !== next.width) {
+          store.patch({ widget: { startButton: next } });
+        }
+      }
+    },
+    intervalMs: 4000,
+  });
+
+  const widget = new WidgetController({
+    getSettings: settings,
+    patch: (patch) => {
+      store.patch({ widget: patch });
+    },
+    dock,
+  });
 
   const broadcastSample = (sample: LiveSample) => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -57,7 +90,7 @@ if (!gotLock) {
   };
 
   const setPaused = (paused: boolean) => {
-    store.update(mergeSettings(settings(), { monitor: { paused } }));
+    store.patch({ monitor: { paused } });
     if (paused) {
       sampler.stopTimer();
       broadcastSample({
@@ -79,7 +112,7 @@ if (!gotLock) {
   };
 
   const applyLoginItem = (enabled: boolean) => {
-    store.update(mergeSettings(settings(), { behaviour: { launchAtLogin: enabled } }));
+    store.patch({ behaviour: { launchAtLogin: enabled } });
     if (isWindows || process.platform === 'darwin') {
       app.setLoginItemSettings({
         openAtLogin: enabled,
@@ -88,18 +121,6 @@ if (!gotLock) {
       });
     }
     tray?.rebuildMenu();
-  };
-
-  const openView = (view: ViewName) => {
-    if (view === 'widget') {
-      ensureWidget();
-      widget?.focus();
-      return;
-    }
-    ensureStudio();
-    studio?.webContents.send(CHANNELS.openViewRequest, view);
-    studio?.show();
-    studio?.focus();
   };
 
   const ensureStudio = () => {
@@ -117,27 +138,20 @@ if (!gotLock) {
     return studio;
   };
 
-  const ensureWidget = () => {
-    if (!settings().widget.enabled) return null;
-    if (widget && !widget.isDestroyed()) return widget;
-    widget = createWidgetWindow(settings());
-    widget.on('moved', () => {
-      if (!widget || widget.isDestroyed()) return;
-      const [x, y] = widget.getPosition();
-      store.update(mergeSettings(settings(), { widget: { position: { x, y } } }));
-    });
-    widget.on('closed', () => {
-      widget = null;
-    });
-    return widget;
+  const openView = (view: ViewName) => {
+    if (view === 'widget') {
+      widget.ensure();
+      return;
+    }
+    ensureStudio();
+    studio?.webContents.send(CHANNELS.openViewRequest, view);
+    studio?.show();
+    studio?.focus();
   };
 
-  const destroyWindows = () => {
-    for (const win of [studio, widget]) {
-      if (win && !win.isDestroyed()) win.destroy();
-    }
+  const destroyStudio = () => {
+    if (studio && !studio.isDestroyed()) studio.destroy();
     studio = null;
-    widget = null;
   };
 
   const windowAction = (action: WindowAction, value: boolean | undefined, win: BrowserWindow | undefined) => {
@@ -151,30 +165,38 @@ if (!gotLock) {
         break;
       case 'close':
         if (settings().behaviour.minimizeToTray && !quitting) target?.hide();
+        else if (target === studio) destroyStudio();
         else target?.close();
         break;
       case 'always-on-top': {
         const enabled = value ?? !(target?.isAlwaysOnTop() ?? false);
         target?.setAlwaysOnTop(enabled, 'screen-saver');
-        if (target === widget) store.update(mergeSettings(settings(), { widget: { alwaysOnTop: enabled } }));
+        if (target === widget.window) store.patch({ widget: { alwaysOnTop: enabled } });
         tray?.rebuildMenu();
         break;
       }
     }
   };
 
+  /**
+   * The window material can only be chosen at construction time, so a material or
+   * theme change rebuilds the window it belongs to. The Studio only needs a rebuild
+   * when its background colour changes; the widget when its glass mode does.
+   */
   const relaunchWindows = () => {
-    // The window material can only be set at construction time.
     const showStudio = studio !== null && !studio.isDestroyed();
-    const showWidget = widget !== null && !widget.isDestroyed();
-    destroyWindows();
+    destroyStudio();
     if (showStudio) openView('studio');
-    if (showWidget) ensureWidget();
+    widget.recreate();
+  };
+
+  const repositionWidget = () => {
+    widget.apply(settings());
   };
 
   app.on('second-instance', () => openView('studio'));
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const file = settingsPath(app.getPath('userData'));
     const loaded = loadSettings(file);
     store = new SettingsStore(file, loaded);
@@ -191,23 +213,29 @@ if (!gotLock) {
       onSample: broadcastSample,
     });
 
+    await dock.refresh(true);
+
     tray = new NetGaugeTray(settings, {
       openStudio: () => openView('studio'),
       runSpeedTest: () => openView('test'),
       toggleWidget: () => {
         const enabled = !settings().widget.enabled;
-        store.update(mergeSettings(settings(), { widget: { enabled } }));
-        if (enabled) ensureWidget();
-        else widget?.close();
+        store.patch({ widget: { enabled } });
+        if (enabled) widget.ensure();
+        else widget.window?.hide();
         tray?.rebuildMenu();
       },
       togglePaused: () => setPaused(!settings().monitor.paused),
       setUnit: (unit) => {
-        store.update(mergeSettings(settings(), { monitor: { unit } }));
+        store.patch({ monitor: { unit } });
         tray?.rebuildMenu();
       },
-      toggleAlwaysOnTop: () => windowAction('always-on-top', !settings().widget.alwaysOnTop, widget ?? undefined),
+      toggleAlwaysOnTop: () => windowAction('always-on-top', !settings().widget.alwaysOnTop, widget.window ?? undefined),
       toggleLoginItem: () => applyLoginItem(!settings().behaviour.launchAtLogin),
+      redock: () => {
+        widget.resetDock();
+        void dock.refresh(true).then(repositionWidget);
+      },
       quit: () => {
         quitting = true;
         app.quit();
@@ -225,19 +253,18 @@ if (!gotLock) {
       openView,
       setLoginItem: applyLoginItem,
       relaunchWindows,
+      probeTaskbar: async () => {
+        const layout = await dock.refresh(true);
+        return { layout, rect: dock.rect(), metrics: widgetMetrics(settings()) };
+      },
+      widgetResize: (width, height) => widget.resizeToContent(width, height),
     });
 
     store.onChange((next) => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.send(CHANNELS.settingsChanged, next);
       }
-      // Live-apply the settings that do not need a new window.
-      if (widget && !widget.isDestroyed()) {
-        widget.setAlwaysOnTop(next.widget.alwaysOnTop, 'screen-saver');
-        widget.setIgnoreMouseEvents(next.widget.clickThrough, { forward: true });
-        const width = Math.round(next.widget.width * next.widget.scale);
-        widget.setSize(width, Math.round(230 * next.widget.scale));
-      }
+      widget.apply(next);
       sampler.setOptions({
         intervalMs: next.monitor.sampleMs,
         adapter: next.monitor.adapter,
@@ -251,7 +278,7 @@ if (!gotLock) {
     if (isWindows || process.platform === 'darwin') {
       const actual = app.getLoginItemSettings().openAtLogin;
       if (actual !== initial.behaviour.launchAtLogin) {
-        store.update(mergeSettings(initial, { behaviour: { launchAtLogin: actual } }));
+        store.patch({ behaviour: { launchAtLogin: actual } });
       }
     }
 
@@ -259,20 +286,30 @@ if (!gotLock) {
 
     const hidden = process.argv.includes('--hidden') || initial.behaviour.startHidden;
     if (!hidden) openView('studio');
-    ensureWidget();
+    widget.ensure();
+    dock.start();
+
+    screen.on('display-metrics-changed', () => {
+      void dock.refresh(true).then(repositionWidget);
+    });
+    screen.on('display-added', () => void dock.refresh(true).then(repositionWidget));
+    screen.on('display-removed', () => void dock.refresh(true).then(repositionWidget));
   });
 
-  // Closing the window keeps NetGauge alive in the tray — that is the point of it.
+  // NetGauge lives in the tray (and, when docked, on the taskbar): closing every
+  // window is not a reason to exit. Quit comes from the tray menu.
   app.on('window-all-closed', () => {
-    if (!isWindows && !quitting) return;
+    if (process.platform === 'darwin') return;
+    if (quitting) app.quit();
   });
 
   app.on('before-quit', () => {
     quitting = true;
+    dock.stop();
     sampler?.stop();
     tray?.destroy();
+    widget.destroy();
   });
 
   app.on('activate', () => openView('studio'));
 }
-

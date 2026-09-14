@@ -28,7 +28,10 @@ export default function AppearancePanel() {
         </p>
       </div>
 
-      <SectionCard title="Material" description="Acrylic and mica are real Windows 11 compositor materials; the others work everywhere.">
+      <SectionCard
+        title="Material"
+        description="Controls the widget. The Studio window itself is always opaque, so the numbers are readable no matter what is behind the window."
+      >
         <Row label="Theme">
           <Select<ThemeMode>
             label="Theme"
@@ -41,23 +44,23 @@ export default function AppearancePanel() {
             ]}
           />
         </Row>
-        <Row label="Window material" hint="Changing this rebuilds the window.">
+        <Row label="Widget material" hint="Changing this rebuilds the widget window.">
           <Select<GlassMode>
             label="Window material"
             value={a.glass}
             onChange={(glass) => patch({ glass })}
             options={[
+              { value: 'transparent', label: 'Transparent (no panel)' },
               { value: 'acrylic', label: 'Acrylic (Windows 11)' },
               { value: 'mica', label: 'Mica (Windows 11)' },
-              { value: 'transparent', label: 'Transparent' },
               { value: 'solid', label: 'Solid' },
             ]}
           />
         </Row>
-        <Row label="Opacity" hint="How much of the desktop shows through.">
+        <Row label="Widget opacity" hint="How much of the taskbar shows through the widget.">
           <Slider label="Opacity" value={a.opacity} min={0.15} max={1} step={0.01} onChange={(opacity) => patch({ opacity })} format={(v) => `${Math.round(v * 100)}%`} />
         </Row>
-        <Row label="Background blur">
+        <Row label="Widget background blur">
           <Slider label="Blur" value={a.blur} min={0} max={60} onChange={(blur) => patch({ blur })} format={(v) => `${v}px`} />
         </Row>
         <Row label="Corner radius">

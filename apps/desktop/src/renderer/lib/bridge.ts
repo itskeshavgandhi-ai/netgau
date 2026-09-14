@@ -2,12 +2,16 @@ import { ema } from '@netgauge/core';
 import {
   DEFAULT_SETTINGS,
   mergeSettings,
+  widgetMetrics,
   type AdapterInfo,
   type AppInfo,
   type LiveSample,
   type NetGaugeApi,
   type NetGaugeSettings,
+  type SettingsPatch,
+  type TaskbarProbeResult,
   type ViewName,
+  type WidgetMetrics,
   type WindowAction,
 } from '../../shared/bridge';
 
@@ -100,7 +104,7 @@ class SimulatedBridge implements NetGaugeApi {
     return this.settings;
   }
 
-  async setSettings(patch: Partial<NetGaugeSettings>): Promise<NetGaugeSettings> {
+  async setSettings(patch: SettingsPatch): Promise<NetGaugeSettings> {
     const next = mergeSettings(this.settings, patch);
     const intervalChanged = next.monitor.sampleMs !== this.settings.monitor.sampleMs;
     this.settings = next;
@@ -158,6 +162,40 @@ class SimulatedBridge implements NetGaugeApi {
       isPackaged: false,
       simulated: true,
     };
+  }
+
+  /**
+   * Preview stand-in for the Windows taskbar: a 1920×1080 display with a 48 px
+   * bottom taskbar and a Start button near the middle, which is what Windows 11
+   * looks like. Enough for the Studio's docking controls to be exercised in a
+   * browser tab.
+   */
+  async probeTaskbar(): Promise<TaskbarProbeResult> {
+    const display = { x: 0, y: 0, width: window.innerWidth || 1920, height: 1080 };
+    const thickness = 48;
+    const rect = { x: display.x, y: display.y + display.height - thickness, width: display.width, height: thickness };
+    const startButton = { x: Math.round(rect.x + rect.width / 2 - 120), y: rect.y, width: 48, height: thickness };
+    return {
+      layout: {
+        rect,
+        edge: 'bottom',
+        thickness,
+        autoHide: false,
+        alignment: 'center',
+        startButton,
+        source: 'workArea',
+      },
+      rect: { x: startButton.x - 8 - 300, y: rect.y + 7, width: 300, height: 34 },
+      metrics: widgetMetrics(this.settings),
+    };
+  }
+
+  async getWidgetMetrics(): Promise<WidgetMetrics> {
+    return widgetMetrics(this.settings);
+  }
+
+  async reportWidgetSize(): Promise<void> {
+    // The preview lays the widget out inside a page, so there is nothing to resize.
   }
 
   async setLoginItem(): Promise<void> {

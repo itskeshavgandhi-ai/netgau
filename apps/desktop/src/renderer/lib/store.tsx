@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RingBuffer, type SpeedTestResult } from '@netgauge/core';
-import { DEFAULT_SETTINGS, type AppInfo, type LiveSample, type NetGaugeSettings } from '../../shared/bridge';
+import { DEFAULT_SETTINGS, type AppInfo, type LiveSample, type NetGaugeSettings, type SettingsPatch } from '../../shared/bridge';
 import { applySettings, watchSystemTheme } from './theme';
 import { bridge, isSimulated } from './bridge';
 
@@ -12,7 +12,7 @@ interface Store {
   history: LiveSample[];
   info: AppInfo | null;
   simulated: boolean;
-  update: (patch: Partial<NetGaugeSettings>) => Promise<void>;
+  update: (patch: SettingsPatch) => Promise<void>;
   setPaused: (paused: boolean) => Promise<void>;
   lastResult: SpeedTestResult | null;
   setLastResult: (result: SpeedTestResult | null) => void;
@@ -68,7 +68,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => applySettings(settings), [settings]);
   useEffect(() => watchSystemTheme(settings, () => applySettings(settings)), [settings]);
 
-  const update = useCallback(async (patch: Partial<NetGaugeSettings>) => {
+  const update = useCallback(async (patch: SettingsPatch) => {
     const next = await bridge.setSettings(patch);
     setSettings(next);
     applySettings(next);

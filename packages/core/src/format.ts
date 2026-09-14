@@ -67,6 +67,28 @@ export function formatSpeed(
   return { value: value0, unit, text: `${trim(value0, 0)}${separator}${unit}`, scale: 1 };
 }
 
+/**
+ * High-precision variant for result panels, where "312.418 Mbps" is more useful than
+ * "312.4 Mbps". Uses a fixed number of decimals so the digits do not jump around.
+ */
+export function formatSpeedExact(bitsPerSecond: number, mode: UnitMode = 'bits', digits = 3): string {
+  const formatted = formatSpeed(bitsPerSecond, mode, { digits });
+  const value = Number.isFinite(formatted.value) ? formatted.value : 0;
+  return `${value.toFixed(digits)}${' '}${formatted.unit}`;
+}
+
+/** The raw measured value with thousands separators: `312,418,000 bit/s`. */
+export function formatRawBitrate(bitsPerSecond: number): string {
+  const safe = Number.isFinite(bitsPerSecond) && bitsPerSecond > 0 ? Math.round(bitsPerSecond) : 0;
+  return `${safe.toLocaleString('en-US')} bit/s`;
+}
+
+/** `87.5%` — used for packet loss and similar ratios. */
+export function formatPercent(value: number, digits = 1): string {
+  if (!Number.isFinite(value)) return '—';
+  return `${value.toFixed(digits)}%`;
+}
+
 function trim(value: number, digits: number): string {
   if (!Number.isFinite(value)) return '0';
   const fixed = value.toFixed(digits);

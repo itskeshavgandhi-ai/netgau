@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DEFAULT_SETTINGS, sanitizeSettings, type NetGaugeSettings } from '../shared/bridge';
+import { DEFAULT_SETTINGS, mergeSettings, sanitizeSettings, type NetGaugeSettings } from '../shared/bridge';
 
 export function settingsPath(userDataDir: string): string {
   return join(userDataDir, 'netgauge-settings.json');
@@ -36,20 +36,32 @@ export function saveSettings(file: string, settings: NetGaugeSettings): void {
 export class SettingsStore {
   private current: NetGaugeSettings;
   private readonly listeners = new Set<(settings: NetGaugeSettings) => void>();
+  private lastError: string | undefined;
 
   constructor(
     private readonly file: string,
     initial?: LoadResult,
   ) {
     this.current = initial?.settings ?? loadSettings(file).settings;
+    this.lastError = initial?.error;
   }
 
   get(): NetGaugeSettings {
     return this.current;
   }
 
+  /** Why the on-disk file was rejected, if it was. Surfaced in Studio → About. */
   get loadError(): string | undefined {
-    return undefined;
+    return this.lastError;
+  }
+
+  /**
+   * Applies a *partial* settings patch. This is the reason the store exists: a
+   * shallow spread of `{widget: {width}}` used to wipe every other widget setting
+   * back to its default, because the merged object was then re-sanitised.
+   */
+  patch(patch: unknown): NetGaugeSettings {
+    return this.update(mergeSettings(this.current, patch));
   }
 
   onChange(listener: (settings: NetGaugeSettings) => void): () => void {
