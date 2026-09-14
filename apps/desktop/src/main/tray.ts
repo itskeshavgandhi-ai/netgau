@@ -1,4 +1,4 @@
-import { Menu, Tray, nativeImage, app } from 'electron';
+import { Menu, Notification, Tray, app, nativeImage, screen } from 'electron';
 import { formatLatency, formatSpeed, renderTrayIcon, trayTooltip } from '@netgauge/core';
 import { hexToRgb, type LiveSample, type NetGaugeSettings, type UnitMode } from '../shared/bridge';
 
@@ -10,6 +10,8 @@ export interface TrayActions {
   setUnit(unit: UnitMode): void;
   toggleAlwaysOnTop(): void;
   toggleLoginItem(): void;
+  /** Re-detect the taskbar and clear the manual nudge. */
+  redock(): void;
   quit(): void;
 }
 
@@ -43,9 +45,13 @@ export class NetGaugeTray {
   }
 
   private render(level: number, paused: boolean) {
+    // Windows trays are 16 logical px wide, but at 150% scaling the OS wants 24
+    // physical px. Rendering at the display's scale factor (and telling Electron so)
+    // is what keeps the icon from looking soft on a scaled display.
+    const factor = Math.max(1, Math.min(4, Math.round(screen.getPrimaryDisplay().scaleFactor || 1)));
     const { data, width, height } = renderTrayIcon({
       size: ICON_SIZE,
-      scale: 2,
+      scale: 2 * factor,
       accent: hexToRgb(this.getSettings().appearance.accent),
       level,
       mode: paused ? 'paused' : 'bars',
@@ -53,6 +59,7 @@ export class NetGaugeTray {
     const image = nativeImage.createFromBuffer(Buffer.from(data.buffer, data.byteOffset, data.byteLength), {
       width,
       height,
+      scaleFactor: factor,
     });
     if (process.platform === 'darwin') image.setTemplateImage(true);
     return image;
@@ -98,6 +105,11 @@ export class NetGaugeTray {
         click: () => this.actions.toggleWidget(),
       },
       {
+        label: settings.widget.dock === 'taskbar' ? 'Re-dock widget to taskbar' : 'Reset widget position',
+        enabled: settings.widget.enabled,
+        click: () => this.actions.redock(),
+      },
+      {
         label: settings.monitor.paused ? 'Resume monitoring' : 'Pause monitoring',
         click: () => this.actions.togglePaused(),
       },
@@ -135,7 +147,20 @@ export class NetGaugeTray {
     this.tray.setContextMenu(menu);
   }
 
+  /**
+   * A native toast when the platform supports it, falling back to the tray balloon.
+   * `displayBalloon` is Windows-only and silently does nothing elsewhere, which used
+   * to make "notify when slow" look broken on macOS/Linux.
+   */
   notify(title: string, body: string): void {
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title, body, silent: false }).show();
+        return;
+      }
+    } catch {
+      /* fall through to the balloon */
+    }
     this.tray?.displayBalloon({ title, content: body });
   }
 

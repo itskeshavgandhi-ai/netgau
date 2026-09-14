@@ -1,3 +1,4 @@
+import type { BufferbloatGrade } from '../stats';
 export interface ServerMeta {
   /** Base URL the test ran against ('' = same origin). */
   baseUrl: string;
@@ -26,6 +27,10 @@ export interface SpeedProgress {
   bytesDown: number;
   bytesUp: number;
   message?: string;
+  /** Live "latency under load" reading, once a saturated probe has answered. */
+  loadedLatencyMs?: number;
+  /** Bytes transferred by the whole test so far (down + up). */
+  totalBytes?: number;
 }
 
 export interface SpeedTestResult {
@@ -36,6 +41,8 @@ export interface SpeedTestResult {
   jitterMs: number;
   /** Mean RTT, for people who prefer it. */
   meanLatencyMs: number;
+  /** Median RTT — the value Cloudflare's test reports. */
+  medianLatencyMs: number;
   lossPercent: number;
   bytesDown: number;
   bytesUp: number;
@@ -45,6 +52,41 @@ export interface SpeedTestResult {
   /** Per-tick throughput samples, useful for the "your line fluctuated" note. */
   downloadSeries: number[];
   uploadSeries: number[];
+  /**
+   * 90th percentile of the per-sample rates inside the steady window. Cloudflare's
+   * public test reports exactly this number; Ookla reports something close to it.
+   * Reported alongside `downBps` so a single measurement can be read both ways.
+   */
+  downBpsP90: number;
+  upBpsP90: number;
+  downBpsMedian: number;
+  upBpsMedian: number;
+  /** Every idle RTT probe, including the discarded warm-up one. */
+  latencySeries: number[];
+  /** RTT probes fired *while* the link was saturated — the bufferbloat signal. */
+  loadedDownLatencyMs: number;
+  loadedUpLatencyMs: number;
+  loadedDownLatencySeries: number[];
+  loadedUpLatencySeries: number[];
+  /** max(loaded) − idle, in ms. Also called "added latency under load". */
+  bufferbloatMs: number;
+  bufferbloatGrade: BufferbloatGrade;
+  /** How the numbers were obtained, so the UI can explain itself. */
+  method: SpeedTestMethod;
+}
+
+export interface SpeedTestMethod {
+  engine: 'netgauge';
+  concurrency: number;
+  phaseDurationMs: number;
+  warmupFraction: number;
+  pingCount: number;
+  /** Wire-level details worth surfacing in the results panel. */
+  adaptiveChunks: boolean;
+  minChunkBytes: number;
+  maxChunkBytes: number;
+  uploadMetering: 'xhr-progress' | 'request-completion';
+  loadedLatency: boolean;
 }
 
 export interface SpeedTestOptions {
@@ -67,6 +109,26 @@ export interface SpeedTestOptions {
   now?: () => number;
   /** Skip the latency phase (e.g. quick re-test). */
   skipLatency?: boolean;
+  /**
+   * Fire latency probes while the link is saturated to measure added latency under
+   * load (bufferbloat). Runs inside the download/upload phases and never changes the
+   * reported phase.
+   */
+  measureLoadedLatency?: boolean;
+  /**
+   * Grow/shrink each request so it lasts roughly `targetRequestMs`. Short requests
+   * mean the byte meter gets frequent updates, which is what makes the live number
+   * and the upload measurement accurate on fast links.
+   */
+  adaptiveChunks?: boolean;
+  targetRequestMs?: number;
+  minChunkBytes?: number;
+  maxChunkBytes?: number;
+  /**
+   * Translates a foreign `/meta` payload into the fields NetGauge shows. Cloudflare's
+   * `speed.cloudflare.com/meta` returns a completely different shape, for example.
+   */
+  mapMeta?: (raw: unknown) => Partial<ServerMeta> | null;
 }
 
 export const DEFAULT_PATHS = {
@@ -81,8 +143,12 @@ export const DEFAULTS = {
   concurrency: 6,
   warmupFraction: 0.2,
   pingCount: 9,
-  /** Chunk sizes each stream walks through, 1 MiB → 32 MiB. */
-  chunkRamp: [1, 2, 4, 8, 16, 32].map((mb) => mb * 1024 * 1024),
+  /** Adaptive request sizing, in bytes. 256 KiB → 32 MiB. */
+  minChunkBytes: 256 * 1024,
+  maxChunkBytes: 32 * 1024 * 1024,
+  targetRequestMs: 1000,
   /** Progress callbacks are throttled to this cadence. */
   progressIntervalMs: 100,
+  /** Latency probe cadence while the link is saturated. */
+  loadedLatencyIntervalMs: 350,
 } as const;

@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { CHANNELS, type NetGaugeApi, type NetGaugeSettings, type LiveSample, type ViewName } from '../shared/bridge';
+import {
+  CHANNELS,
+  type LiveSample,
+  type NetGaugeApi,
+  type NetGaugeSettings as NetGaugeSettingsPayload,
+  type SettingsPatch,
+  type ViewName,
+} from '../shared/bridge';
 
 function subscribe<T>(channel: string, handler: (payload: T) => void): () => void {
   const listener = (_event: IpcRendererEvent, payload: T) => handler(payload);
@@ -9,8 +16,8 @@ function subscribe<T>(channel: string, handler: (payload: T) => void): () => voi
 
 const api: NetGaugeApi = {
   getSettings: () => ipcRenderer.invoke(CHANNELS.settingsGet),
-  setSettings: (patch: Partial<NetGaugeSettings>) => ipcRenderer.invoke(CHANNELS.settingsSet, patch),
-  onSettings: (handler) => subscribe<NetGaugeSettings>(CHANNELS.settingsChanged, handler),
+  setSettings: (patch: SettingsPatch) => ipcRenderer.invoke(CHANNELS.settingsSet, patch),
+  onSettings: (handler) => subscribe<NetGaugeSettingsPayload>(CHANNELS.settingsChanged, handler),
   onSample: (handler) => subscribe<LiveSample>(CHANNELS.sample, handler),
   getAdapters: () => ipcRenderer.invoke(CHANNELS.adapters),
   setPaused: (paused) => ipcRenderer.invoke(CHANNELS.setPaused, paused),
@@ -20,6 +27,9 @@ const api: NetGaugeApi = {
   getAppInfo: () => ipcRenderer.invoke(CHANNELS.appInfo),
   setLoginItem: (enabled) => ipcRenderer.invoke(CHANNELS.loginItem, enabled),
   relaunchWindow: () => ipcRenderer.invoke(CHANNELS.relaunchWindow),
+  probeTaskbar: () => ipcRenderer.invoke(CHANNELS.taskbarProbe),
+  getWidgetMetrics: () => ipcRenderer.invoke(CHANNELS.widgetMetrics),
+  reportWidgetSize: (width, height) => ipcRenderer.invoke(CHANNELS.widgetResize, width, height),
 };
 
 contextBridge.exposeInMainWorld('netgauge', api);

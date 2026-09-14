@@ -76,7 +76,7 @@ describe('sanitizeSettings', () => {
     expect(s.appearance.fontScale).toBe(0.8);
     expect(s.appearance.fontWeight).toBe(700);
     expect(s.appearance.letterSpacing).toBe(0.12);
-    expect(s.widget.width).toBe(560);
+    expect(s.widget.width).toBe(720);
     expect(s.widget.scale).toBe(1.8);
     expect(s.monitor.sampleMs).toBe(250);
     expect(s.monitor.referenceMbps).toBe(10);
@@ -158,5 +158,65 @@ describe('hexToRgb', () => {
     expect(hexToRgb('#22d3ee')).toEqual([34, 211, 238]);
     expect(hexToRgb('#fff')).toEqual([255, 255, 255]);
     expect(hexToRgb('garbage')).toEqual([34, 211, 238]);
+  });
+});
+
+describe('SettingsStore patching', () => {
+  it('deep-merges a partial section patch instead of resetting its siblings', () => {
+    const dir2 = mkdtempSync(join(tmpdir(), 'netgauge-patch-'));
+    const store = new SettingsStore(join(dir2, 'settings.json'), { settings: DEFAULT_SETTINGS });
+    store.patch({ widget: { width: 420 } });
+    const after = store.get();
+    // The bug: `{...current, ...patch}` replaced the whole `widget` object, so every
+    // other widget key silently fell back to its default.
+    expect(after.widget.width).toBe(420);
+    expect(after.widget.dock).toBe(DEFAULT_SETTINGS.widget.dock);
+    expect(after.widget.dockAlign).toBe(DEFAULT_SETTINGS.widget.dockAlign);
+    expect(after.widget.dockThickness).toBe(DEFAULT_SETTINGS.widget.dockThickness);
+    expect(after.widget.showSparkline).toBe(DEFAULT_SETTINGS.widget.showSparkline);
+  });
+
+  it('merges across sections without touching the others', () => {
+    const dir3 = mkdtempSync(join(tmpdir(), 'netgauge-patch2-'));
+    const store = new SettingsStore(join(dir3, 'settings.json'), { settings: DEFAULT_SETTINGS });
+    store.patch({ monitor: { unit: 'bytes' }, widget: { dockOffsetX: 12 } });
+    const after = store.get();
+    expect(after.monitor.unit).toBe('bytes');
+    expect(after.monitor.sampleMs).toBe(DEFAULT_SETTINGS.monitor.sampleMs);
+    expect(after.widget.dockOffsetX).toBe(12);
+    expect(after.appearance.accent).toBe(DEFAULT_SETTINGS.appearance.accent);
+  });
+
+  it('reports why a corrupt settings file was discarded', () => {
+    const broken = join(dir, 'broken-store.json');
+    writeFileSync(broken, 'nope{', 'utf8');
+    const store = new SettingsStore(broken, loadSettings(broken));
+    expect(store.loadError).toBeTruthy();
+  });
+
+  it('clamps the new docking fields', () => {
+    const s = sanitizeSettings({
+      widget: { dockOffsetX: 99_999, dockOffsetY: -99_999, dockGap: 5000, dockThickness: 5, dockAlign: 'sideways' },
+    });
+    expect(s.widget.dockOffsetX).toBe(4000);
+    expect(s.widget.dockOffsetY).toBe(-400);
+    expect(s.widget.dockGap).toBe(200);
+    expect(s.widget.dockThickness).toBe(24);
+    expect(s.widget.dockAlign).toBe(DEFAULT_SETTINGS.widget.dockAlign);
+  });
+
+  it('keeps a cached Start-button rectangle only when it is a real box', () => {
+    expect(sanitizeSettings({ widget: { startButton: { x: 10, y: 20, width: 48, height: 40 } } }).widget.startButton).toEqual({
+      x: 10,
+      y: 20,
+      width: 48,
+      height: 40,
+    });
+    expect(sanitizeSettings({ widget: { startButton: { x: 'nope' } } }).widget.startButton).toBeNull();
+  });
+
+  it('validates the speed-test server mode', () => {
+    expect(sanitizeSettings({ speedTest: { server: 'cloudflare' } }).speedTest.server).toBe('cloudflare');
+    expect(sanitizeSettings({ speedTest: { server: 'carrier-pigeon' } }).speedTest.server).toBe('auto');
   });
 });

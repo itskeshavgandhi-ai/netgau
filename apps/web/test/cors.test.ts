@@ -31,4 +31,22 @@ describe.skipIf(!baseUrl)('speed API CORS headers', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     await res.body?.cancel();
   });
+
+  it('allows cross-origin timing so latency can be read without zeroing it out', async () => {
+    // Without Timing-Allow-Origin the browser reports 0 for every
+    // PerformanceResourceTiming field on a cross-origin response.
+    for (const path of ['/api/speed/ping', '/api/speed/download?bytes=1024', '/api/speed/meta']) {
+      const res = await fetch(`${baseUrl}${path}`);
+      expect(res.headers.get('timing-allow-origin'), path).toBe('*');
+      await res.body?.cancel();
+    }
+  });
+
+  it('returns the exact byte count requested, with an identity encoding', async () => {
+    const res = await fetch(`${baseUrl}/api/speed/download?bytes=131072`);
+    expect(res.headers.get('content-length')).toBe('131072');
+    expect(res.headers.get('content-encoding')).toBe('identity');
+    const buffer = await res.arrayBuffer();
+    expect(buffer.byteLength).toBe(131072);
+  });
 });

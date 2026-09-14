@@ -121,6 +121,61 @@ export function steadyStateBps(points: TimeSeriesPoint[], warmupFraction = 0.2):
   return ((end.bytes - anchor.bytes) / dt) * 8;
 }
 
+/** Population standard deviation — used to describe how flat a transfer was. */
+export function stddev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const m = mean(values);
+  let sum = 0;
+  for (const v of values) sum += (v - m) ** 2;
+  return Math.sqrt(sum / (values.length - 1));
+}
+
+export interface SeriesSummary {
+  count: number;
+  min: number;
+  median: number;
+  mean: number;
+  p90: number;
+  max: number;
+  /** Relative spread (stddev / mean); 0 = perfectly flat line. */
+  variability: number;
+}
+
+/** One-shot description of a throughput sample series, in bits/second. */
+export function summarizeSeries(values: number[]): SeriesSummary {
+  const clean = values.filter((v) => Number.isFinite(v) && v >= 0);
+  if (clean.length === 0) {
+    return { count: 0, min: 0, median: 0, mean: 0, p90: 0, max: 0, variability: 0 };
+  }
+  const m = mean(clean);
+  return {
+    count: clean.length,
+    min: Math.min(...clean),
+    median: percentile(clean, 50),
+    mean: m,
+    p90: percentile(clean, 90),
+    max: Math.max(...clean),
+    variability: m > 0 ? stddev(clean) / m : 0,
+  };
+}
+
+export type BufferbloatGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | 'n/a';
+
+/**
+ * Waveform/BufferSpeed-style grading of "latency added under load" (loaded − idle).
+ * Thresholds are the widely published ones: A+ ≤5 ms, A 5–30, B 30–60, C 60–200,
+ * D 200–400, F >400 ms.
+ */
+export function bufferbloatGrade(addedMs: number): BufferbloatGrade {
+  if (!Number.isFinite(addedMs) || addedMs < 0) return 'n/a';
+  if (addedMs <= 5) return 'A+';
+  if (addedMs <= 30) return 'A';
+  if (addedMs <= 60) return 'B';
+  if (addedMs <= 200) return 'C';
+  if (addedMs <= 400) return 'D';
+  return 'F';
+}
+
 /** Auto-scale max for a chart axis so the line never sits flat at the top. */
 export function niceCeil(value: number): number {
   if (value <= 0) return 10;

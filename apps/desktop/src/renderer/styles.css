@@ -7,6 +7,9 @@
 :root {
   --ng-accent: #22d3ee;
   --ng-opacity: 0.62;
+  /* Opacity of the glass *panel* itself. The Studio forces this to 1 so the app is
+     never readable only through whatever is behind it; the widget uses --ng-opacity. */
+  --ng-surface-alpha: 1;
   --ng-blur: 26px;
   --ng-radius: 18px;
   --ng-font-ui: 'Inter Variable';
@@ -23,6 +26,8 @@
   --ng-faint: #64708c;
   --ng-base: 7 11 22;
   --ng-hairline: 255 255 255;
+  --ng-app-bg: #0b1120;
+  --ng-shadow: 0 1px 2px rgb(0 0 0 / 0.85), 0 0 10px rgb(0 0 0 / 0.55);
 
   font-size: calc(16px * var(--ng-font-scale));
 }
@@ -33,6 +38,8 @@
   --ng-faint: #6b7893;
   --ng-base: 255 255 255;
   --ng-hairline: 8 12 24;
+  --ng-app-bg: #eef1f7;
+  --ng-shadow: 0 1px 2px rgb(255 255 255 / 0.9), 0 0 10px rgb(255 255 255 / 0.7);
 }
 
 * {
@@ -47,8 +54,9 @@ body,
 }
 
 body {
-  /* The window itself is transparent — the OS paints acrylic/mica behind us. */
-  background: transparent;
+  /* Opaque everywhere except the widget, which is the one surface that is meant to
+     float transparently over the desktop / taskbar. */
+  background: var(--ng-app-bg);
   color: var(--ng-ink);
   font-family: var(--ng-font-ui), system-ui, sans-serif;
   font-weight: var(--ng-font-weight);
@@ -58,8 +66,12 @@ body {
   user-select: none;
 }
 
+body[data-view='widget'] {
+  background: transparent;
+}
+
 /* Only in browser preview mode: give the glass something to sit on. */
-body[data-simulated='true'] {
+body[data-simulated='true']:not([data-view='widget']) {
   background:
     radial-gradient(120% 90% at 15% 0%, #12324f 0%, transparent 55%),
     radial-gradient(100% 80% at 90% 100%, #2a1a52 0%, transparent 60%),
@@ -85,11 +97,11 @@ body[data-simulated='true'] {
   background:
     linear-gradient(
       155deg,
-      rgb(var(--ng-hairline) / calc(0.09 * var(--ng-opacity))) 0%,
-      rgb(var(--ng-hairline) / calc(0.02 * var(--ng-opacity))) 46%,
-      rgb(var(--ng-hairline) / calc(0.05 * var(--ng-opacity))) 100%
+      rgb(var(--ng-hairline) / calc(0.09 * var(--ng-surface-alpha))) 0%,
+      rgb(var(--ng-hairline) / calc(0.02 * var(--ng-surface-alpha))) 46%,
+      rgb(var(--ng-hairline) / calc(0.05 * var(--ng-surface-alpha))) 100%
     ),
-    rgb(var(--ng-base) / var(--ng-opacity));
+    rgb(var(--ng-base) / var(--ng-surface-alpha));
   backdrop-filter: blur(var(--ng-blur)) saturate(170%);
   -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
   border: 1px solid rgb(var(--ng-hairline) / 0.1);
@@ -309,4 +321,75 @@ body[data-simulated='true'] {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ------------------------------ widget surfaces ------------------------------
+ * The widget is the one window that is allowed to be transparent. `data-material`
+ * comes from the user's setting so the same markup can render as bare text over the
+ * taskbar, as a glass card, or as a solid panel.
+ * --------------------------------------------------------------------------- */
+
+body[data-view='widget'] {
+  overflow: hidden;
+  user-select: none;
+}
+
+.ng-widget {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.ng-widget[data-material='transparent'] {
+  background: transparent;
+}
+
+.ng-widget[data-material='glass'] {
+  background: linear-gradient(
+      155deg,
+      rgb(var(--ng-hairline) / calc(0.10 * var(--ng-opacity))) 0%,
+      rgb(var(--ng-hairline) / calc(0.03 * var(--ng-opacity))) 100%
+    ),
+    rgb(var(--ng-base) / var(--ng-opacity));
+  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  border: 1px solid rgb(var(--ng-hairline) / 0.12);
+}
+
+.ng-widget[data-material='solid'] {
+  background: rgb(var(--ng-base));
+  border: 1px solid rgb(var(--ng-hairline) / 0.12);
+}
+
+/* Bare text over an arbitrary taskbar needs its own contrast. */
+.ng-widget[data-material='transparent'] .ng-widget-readout {
+  text-shadow: var(--ng-shadow);
+}
+
+.ng-taskbar-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  height: 100%;
+  padding: 0 0.6rem;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ng-taskbar-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.22rem;
+  line-height: 1;
+}
+
+.ng-taskbar-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.ng-divider {
+  width: 1px;
+  height: 55%;
+  background: rgb(var(--ng-hairline) / 0.22);
 }

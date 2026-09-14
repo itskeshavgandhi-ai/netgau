@@ -1,10 +1,10 @@
-import { formatBytes, formatSpeed } from '@netgauge/core';
+import { formatBytes, formatLatency, formatRawBitrate, formatSpeed } from '@netgauge/core';
 import { useStore } from '../lib/store';
 import Sparkline from './Sparkline';
 import { Stat } from './controls';
 
 export default function LivePanel() {
-  const { settings, sample, history, setPaused } = useStore();
+  const { settings, sample, history, setPaused, lastResult } = useStore();
   const unit = settings.monitor.unit;
   const down = formatSpeed(sample.smoothDownBps, unit);
   const up = formatSpeed(sample.smoothUpBps, unit);
@@ -57,6 +57,43 @@ export default function LivePanel() {
           label="Adapter"
           value={settings.monitor.adapter === 'auto' ? (sample.interfaces[0] ?? 'all') : settings.monitor.adapter}
         />
+      </div>
+
+      <div className="ng-panel p-4">
+        <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase" style={{ color: 'var(--ng-faint)' }}>
+          Exact values
+        </p>
+        <div className="num mt-2 grid gap-x-8 gap-y-1 text-[0.72rem] sm:grid-cols-2">
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Download</span>
+            <span>{formatRawBitrate(sample.downBps)}</span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Upload</span>
+            <span>{formatRawBitrate(sample.upBps)}</span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Download (smoothed)</span>
+            <span>{formatRawBitrate(sample.smoothDownBps)}</span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Upload (smoothed)</span>
+            <span>{formatRawBitrate(sample.smoothUpBps)}</span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Combined</span>
+            <span>{formatRawBitrate(sample.totalBps)}</span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span style={{ color: 'var(--ng-faint)' }}>Last sample</span>
+            <span>{sample.t ? new Date(sample.t).toLocaleTimeString() : '—'}</span>
+          </span>
+        </div>
+        <p className="mt-3 text-[0.68rem]" style={{ color: 'var(--ng-muted)' }}>
+          {lastResult
+            ? `Last speed test: ${formatSpeed(lastResult.downBps, unit).text} down · ${formatSpeed(lastResult.upBps, unit).text} up · ${formatLatency(lastResult.latencyMs)} ping · grade ${lastResult.bufferbloatGrade}`
+            : 'No speed test yet — run one from the Speed test tab for a full-line measurement.'}
+        </p>
       </div>
     </div>
   );

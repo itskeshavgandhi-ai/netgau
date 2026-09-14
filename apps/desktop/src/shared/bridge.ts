@@ -1,3 +1,5 @@
+import type { ServerMeta } from '@netgauge/core';
+
 /**
  * The contract between the Electron main process, the preload bridge and the
  * renderer. Everything the user can customise lives in `NetGaugeSettings`, and
@@ -8,6 +10,26 @@
 export type GlassMode = 'acrylic' | 'mica' | 'transparent' | 'solid';
 export type ThemeMode = 'dark' | 'light' | 'system';
 export type UnitMode = 'bits' | 'bytes';
+/** `card` is the floating information card; `taskbar` is the one-line docked strip. */
+export type WidgetLayout = 'auto' | 'card' | 'taskbar';
+/** Where the widget lives: floating anywhere, or pinned into the Windows taskbar. */
+export type WidgetDock = 'floating' | 'taskbar';
+export type TaskbarEdge = 'auto' | 'bottom' | 'top' | 'left' | 'right';
+/**
+ * Horizontal anchor inside the taskbar. `before-start` is the interesting one: it
+ * parks the widget immediately to the LEFT of the Start button (Windows 11's
+ * centred taskbar), which is what most people want.
+ */
+export type DockAlign = 'before-start' | 'after-start' | 'start' | 'center' | 'tray';
+/** Which speed server the desktop test talks to. */
+export type SpeedServerMode = 'auto' | 'netgauge' | 'cloudflare' | 'custom';
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface FontChoice {
   id: string;
@@ -72,12 +94,33 @@ export interface WidgetSettings {
   alwaysOnTop: boolean;
   /** Let clicks pass through the widget (it becomes an overlay). */
   clickThrough: boolean;
+  /** Card width in CSS px (before `scale`). */
   width: number;
   scale: number;
+  /** Remembered free-floating position (only used when `dock` is `floating`). */
   position: { x: number; y: number } | null;
   showSparkline: boolean;
   showPeak: boolean;
   showAdapter: boolean;
+  layout: WidgetLayout;
+  dock: WidgetDock;
+  dockEdge: TaskbarEdge;
+  dockAlign: DockAlign;
+  /** Manual nudge in px, added on top of whatever was auto-detected. */
+  dockOffsetX: number;
+  dockOffsetY: number;
+  /** Gap between the widget and the Start button, in px. */
+  dockGap: number;
+  /** Height of the docked strip in px (the taskbar is ~48 px on Windows 11). */
+  dockThickness: number;
+  /**
+   * What to do when the taskbar is set to auto-hide: `follow` tracks it off-screen
+   * (so the widget disappears with it), `keep` leaves the widget on screen at the
+   * last known spot.
+   */
+  dockAutoHide: 'follow' | 'keep';
+  /** Cached Start-button rectangle from the last UI Automation probe. */
+  startButton: Rect | null;
 }
 
 export interface MonitorSettings {
@@ -95,10 +138,16 @@ export interface MonitorSettings {
 }
 
 export interface SpeedTestSettings {
-  /** Base URL of a NetGauge speed server. '' = the public one. */
+  /** Which server to measure against. */
+  server: SpeedServerMode;
+  /** Base URL used when `server` is `custom`. */
   serverUrl: string;
   concurrency: number;
   phaseDurationMs: number;
+  /** Fire latency probes during the transfer phases to grade bufferbloat. */
+  measureLoadedLatency: boolean;
+  /** Grow/shrink each request so it lasts about a second. */
+  adaptiveChunks: boolean;
 }
 
 export interface BehaviourSettings {
@@ -119,11 +168,22 @@ export interface NetGaugeSettings {
   behaviour: BehaviourSettings;
 }
 
+/**
+ * A patch is one level deep: `{ widget: { width: 320 } }` changes only the width.
+ * The main process deep-merges it (`SettingsStore.patch`), so unrelated keys in the
+ * same section survive — which a shallow spread would silently reset.
+ */
+export type SettingsPatch = {
+  [K in keyof NetGaugeSettings]?: NetGaugeSettings[K] extends object ? Partial<NetGaugeSettings[K]> : NetGaugeSettings[K];
+};
+
 export const DEFAULT_SETTINGS: NetGaugeSettings = {
   version: 1,
   appearance: {
     theme: 'dark',
-    glass: 'acrylic',
+    // The widget is a see-through strip by default (that is what it is for); the
+    // Studio window is always opaque regardless of this value.
+    glass: 'transparent',
     opacity: 0.62,
     blur: 26,
     accent: '#22d3ee',
@@ -147,6 +207,16 @@ export const DEFAULT_SETTINGS: NetGaugeSettings = {
     showSparkline: true,
     showPeak: true,
     showAdapter: true,
+    layout: 'auto',
+    dock: 'taskbar',
+    dockEdge: 'auto',
+    dockAlign: 'before-start',
+    dockOffsetX: 0,
+    dockOffsetY: 0,
+    dockGap: 8,
+    dockThickness: 34,
+    dockAutoHide: 'follow',
+    startButton: null,
   },
   monitor: {
     sampleMs: 1000,
@@ -158,9 +228,12 @@ export const DEFAULT_SETTINGS: NetGaugeSettings = {
     paused: false,
   },
   speedTest: {
+    server: 'auto',
     serverUrl: '',
     concurrency: 6,
     phaseDurationMs: 10_000,
+    measureLoadedLatency: true,
+    adaptiveChunks: true,
   },
   behaviour: {
     launchAtLogin: false,
@@ -178,6 +251,11 @@ export const DEFAULT_SETTINGS: NetGaugeSettings = {
 const GLASS_MODES: GlassMode[] = ['acrylic', 'mica', 'transparent', 'solid'];
 const THEMES: ThemeMode[] = ['dark', 'light', 'system'];
 const UNITS: UnitMode[] = ['bits', 'bytes'];
+const WIDGET_LAYOUTS: WidgetLayout[] = ['auto', 'card', 'taskbar'];
+const WIDGET_DOCKS: WidgetDock[] = ['floating', 'taskbar'];
+const TASKBAR_EDGES: TaskbarEdge[] = ['auto', 'bottom', 'top', 'left', 'right'];
+const DOCK_ALIGNS: DockAlign[] = ['before-start', 'after-start', 'start', 'center', 'tray'];
+const SERVER_MODES: SpeedServerMode[] = ['auto', 'netgauge', 'cloudflare', 'custom'];
 
 function num(value: unknown, fallback: number, min: number, max: number): number {
   const n = typeof value === 'string' ? Number(value) : value;
@@ -195,6 +273,18 @@ function str(value: unknown, fallback: string): string {
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+/** A plain `{x,y,width,height}` box, or null when the input is unusable. */
+function rect(value: unknown): Rect | null {
+  if (!value || typeof value !== 'object') return null;
+  const r = value as Record<string, unknown>;
+  const x = num(r.x, Number.NaN, -100_000, 100_000);
+  const y = num(r.y, Number.NaN, -100_000, 100_000);
+  const width = num(r.width, Number.NaN, 0, 100_000);
+  const height = num(r.height, Number.NaN, 0, 100_000);
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
 }
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -253,12 +343,22 @@ export function sanitizeSettings(input: unknown): NetGaugeSettings {
       enabled: bool(w.enabled, d.widget.enabled),
       alwaysOnTop: bool(w.alwaysOnTop, d.widget.alwaysOnTop),
       clickThrough: bool(w.clickThrough, d.widget.clickThrough),
-      width: num(w.width, d.widget.width, 220, 560),
+      width: num(w.width, d.widget.width, 160, 720),
       scale: num(w.scale, d.widget.scale, 0.7, 1.8),
       position,
       showSparkline: bool(w.showSparkline, d.widget.showSparkline),
       showPeak: bool(w.showPeak, d.widget.showPeak),
       showAdapter: bool(w.showAdapter, d.widget.showAdapter),
+      layout: oneOf(w.layout, WIDGET_LAYOUTS, d.widget.layout),
+      dock: oneOf(w.dock, WIDGET_DOCKS, d.widget.dock),
+      dockEdge: oneOf(w.dockEdge, TASKBAR_EDGES, d.widget.dockEdge),
+      dockAlign: oneOf(w.dockAlign, DOCK_ALIGNS, d.widget.dockAlign),
+      dockOffsetX: Math.round(num(w.dockOffsetX, d.widget.dockOffsetX, -4000, 4000)),
+      dockOffsetY: Math.round(num(w.dockOffsetY, d.widget.dockOffsetY, -400, 400)),
+      dockGap: Math.round(num(w.dockGap, d.widget.dockGap, 0, 200)),
+      dockThickness: Math.round(num(w.dockThickness, d.widget.dockThickness, 24, 120)),
+      dockAutoHide: w.dockAutoHide === 'keep' ? 'keep' : 'follow',
+      startButton: rect(w.startButton),
     },
     monitor: {
       sampleMs: num(m.sampleMs, d.monitor.sampleMs, 250, 5000),
@@ -270,9 +370,12 @@ export function sanitizeSettings(input: unknown): NetGaugeSettings {
       paused: bool(m.paused, d.monitor.paused),
     },
     speedTest: {
+      server: oneOf(s.server, SERVER_MODES, d.speedTest.server),
       serverUrl: typeof s.serverUrl === 'string' ? s.serverUrl.replace(/\/+$/, '') : d.speedTest.serverUrl,
       concurrency: Math.round(num(s.concurrency, d.speedTest.concurrency, 1, 16)),
       phaseDurationMs: Math.round(num(s.phaseDurationMs, d.speedTest.phaseDurationMs, 2000, 60_000)),
+      measureLoadedLatency: bool(s.measureLoadedLatency, d.speedTest.measureLoadedLatency),
+      adaptiveChunks: bool(s.adaptiveChunks, d.speedTest.adaptiveChunks),
     },
     behaviour: {
       launchAtLogin: bool(b.launchAtLogin, d.behaviour.launchAtLogin),
@@ -331,6 +434,10 @@ export interface AdapterInfo {
 
 export const CHANNELS = {
   settingsGet: 'ng:settings:get',
+  widgetMetrics: 'ng:widget:metrics',
+  widgetResize: 'ng:widget:resize',
+  taskbarProbe: 'ng:taskbar:probe',
+  taskbarLayout: 'ng:taskbar:layout',
   settingsSet: 'ng:settings:set',
   settingsChanged: 'ng:settings:changed',
   sample: 'ng:sample',
@@ -371,12 +478,14 @@ export interface AppInfo {
   isPackaged: boolean;
   /** True when the renderer is running in a plain browser (no Electron bridge). */
   simulated: boolean;
+  /** Set when the settings file on disk had to be rejected/discarded. */
+  settingsError?: string;
 }
 
 /** What `window.netgauge` exposes to the renderer. */
 export interface NetGaugeApi {
   getSettings(): Promise<NetGaugeSettings>;
-  setSettings(patch: Partial<NetGaugeSettings>): Promise<NetGaugeSettings>;
+  setSettings(patch: SettingsPatch): Promise<NetGaugeSettings>;
   onSettings(handler: (settings: NetGaugeSettings) => void): () => void;
   onSample(handler: (sample: LiveSample) => void): () => void;
   getAdapters(): Promise<AdapterInfo[]>;
@@ -389,6 +498,140 @@ export interface NetGaugeApi {
   setLoginItem(enabled: boolean): Promise<void>;
   /** Rebuild the window — needed when the glass material changes. */
   relaunchWindow(): Promise<void>;
+  /** Re-run the Windows taskbar geometry probe (Studio → Widget → Detect). */
+  probeTaskbar(): Promise<TaskbarProbeResult>;
+  /** Current widget size as computed by the shared metrics helper. */
+  getWidgetMetrics(): Promise<WidgetMetrics>;
+  /** The widget renderer reporting its natural content size. */
+  reportWidgetSize(width: number, height: number): Promise<void>;
 }
 
-export const DEFAULT_SPEED_SERVER = 'https://netgauge.app';
+export interface TaskbarProbeResult {
+  layout: {
+    rect: Rect;
+    edge: 'bottom' | 'top' | 'left' | 'right';
+    thickness: number;
+    autoHide: boolean;
+    alignment: 'left' | 'center';
+    startButton: Rect | null;
+    source: 'uia' | 'workArea';
+  } | null;
+  rect: Rect | null;
+  metrics: WidgetMetrics;
+}
+
+/**
+ * Public servers a NetGauge client can measure against without hosting anything.
+ *
+ * - `netgauge` speaks the four `/api/speed/*` routes in apps/web.
+ * - `cloudflare` is Cloudflare's public speed endpoint — the same one their own
+ *   browser test and `@cloudflare/speedtest` use. It needs no key and allows
+ *   cross-origin GET/POST, which makes it a reliable default when no NetGauge
+ *   server is reachable.
+ */
+export const CLOUDFLARE_SPEED_URL = 'https://speed.cloudflare.com';
+
+export const SPEED_SERVER_PRESETS = [
+  { id: 'auto', label: 'Automatic', note: 'NetGauge server if reachable, otherwise Cloudflare' },
+  { id: 'netgauge', label: 'NetGauge server', note: 'The app that serves this client (/api/speed/*)' },
+  { id: 'cloudflare', label: 'Cloudflare', note: 'speed.cloudflare.com — public, worldwide anycast' },
+  { id: 'custom', label: 'Custom URL', note: 'Any server implementing the NetGauge speed API' },
+] as const;
+
+export interface ResolvedSpeedServer {
+  kind: 'netgauge' | 'cloudflare' | 'custom';
+  baseUrl: string;
+  label: string;
+  paths?: { ping?: string; download?: string; upload?: string; meta?: string };
+}
+
+/**
+ * Turns the user's server preference into a concrete endpoint. `auto` prefers a
+ * NetGauge server reachable from the current page (so the numbers match the web
+ * client) and never falls back to a hostname that does not resolve.
+ */
+export function resolveSpeedServer(
+  settings: NetGaugeSettings,
+  env: { netgaugeBaseUrl?: string } = {},
+): ResolvedSpeedServer {
+  const mode = settings.speedTest.server;
+  const custom = settings.speedTest.serverUrl.trim();
+  if (mode === 'custom' && custom) return { kind: 'custom', baseUrl: custom, label: custom };
+  if (mode === 'cloudflare') {
+    return {
+      kind: 'cloudflare',
+      baseUrl: CLOUDFLARE_SPEED_URL,
+      label: 'Cloudflare',
+      paths: { ping: '/__down?bytes=0', download: '/__down', upload: '/__up', meta: '/meta' },
+    };
+  }
+  if (mode === 'netgauge' || mode === 'auto') {
+    const base = env.netgaugeBaseUrl ?? custom;
+    if (base) return { kind: 'netgauge', baseUrl: base, label: 'NetGauge server' };
+    if (mode === 'netgauge') return { kind: 'netgauge', baseUrl: '', label: 'This page' };
+    return {
+      kind: 'cloudflare',
+      baseUrl: CLOUDFLARE_SPEED_URL,
+      label: 'Cloudflare',
+      paths: { ping: '/__down?bytes=0', download: '/__down', upload: '/__up', meta: '/meta' },
+    };
+  }
+  return { kind: 'custom', baseUrl: custom, label: custom || 'Speed server' };
+}
+
+/** Maps Cloudflare's `/meta` payload onto the fields NetGauge displays. */
+export function mapCloudflareMeta(raw: unknown): Partial<ServerMeta> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined);
+  const location = [str(m.city), str(m.region)].filter(Boolean).join(', ');
+  return {
+    host: str(m.hostname) ?? 'speed.cloudflare.com',
+    name: 'Cloudflare Edge',
+    location: location || undefined,
+    country: str(m.country) ?? str(m.colo),
+    ip: str(m.clientIp),
+    isp: str(m.asOrganization),
+    serverTime: typeof m.timestamp === 'string' ? Date.parse(m.timestamp) : undefined,
+  };
+}
+
+export type WidgetLayoutResolved = 'card' | 'taskbar';
+
+/** Which visual layout the widget should use, resolving `auto`. */
+export function widgetLayoutOf(settings: NetGaugeSettings): WidgetLayoutResolved {
+  if (settings.widget.layout === 'card') return 'card';
+  if (settings.widget.layout === 'taskbar') return 'taskbar';
+  return settings.widget.dock === 'taskbar' ? 'taskbar' : 'card';
+}
+
+export interface WidgetMetrics {
+  layout: WidgetLayoutResolved;
+  /** Outer size in device pixels, already scaled. */
+  width: number;
+  height: number;
+}
+
+/**
+ * The single source of truth for the widget window size. The main process sizes the
+ * BrowserWindow with this and the renderer lays out to `100%`, so the two can never
+ * disagree — which is what used to clip the bottom of the widget.
+ */
+export function widgetMetrics(settings: NetGaugeSettings): WidgetMetrics {
+  const w = settings.widget;
+  const scale = w.scale;
+  const width = Math.round(w.width * scale);
+  if (widgetLayoutOf(settings) === 'taskbar') {
+    return { layout: 'taskbar', width, height: Math.round(w.dockThickness * scale) };
+  }
+  // Mirrors the spacings used by views/Widget.tsx (card variant).
+  const header = 22;
+  const down = 34;
+  const up = 22;
+  const gaps = 8 + 2 + 8;
+  const spark = w.showSparkline ? 46 + 6 : 0;
+  const footer = w.showAdapter || w.showPeak ? 15 + 6 : 0;
+  const padding = 14 * 2;
+  const height = Math.round((header + down + up + gaps + spark + footer + padding) * scale);
+  return { layout: 'card', width, height: Math.round(Math.min(Math.max(height, 120), 420)) };
+}

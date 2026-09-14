@@ -1,7 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { formatLatency, formatSpeed, runSpeedTest, type ServerMeta, type SpeedProgress, type SpeedTestHandle, type SpeedTestResult } from '@netgauge/core';
+import {
+  formatBytes,
+  formatLatency,
+  formatRawBitrate,
+  formatSpeed,
+  formatSpeedExact,
+  runSpeedTest,
+  type ServerMeta,
+  type SpeedProgress,
+  type SpeedTestHandle,
+  type SpeedTestResult,
+} from '@netgauge/core';
 import Gauge, { type GaugePhase } from './Gauge';
 import Sparkline from './Sparkline';
 import { clearHistory, loadHistory, pushHistory, relativeTime, type TestRecord } from '@/lib/history';
@@ -279,6 +290,34 @@ export default function SpeedTest() {
               </p>
             </div>
 
+            {result && (
+              <details className="glass-soft rounded-2xl p-4">
+                <summary className="cursor-pointer text-[11px] font-semibold tracking-[0.16em] text-faint uppercase">
+                  Exact numbers &amp; method
+                </summary>
+                <dl className="num mt-3 grid gap-x-6 gap-y-1 text-[11px] sm:grid-cols-2">
+                  <Row label="Download (steady)" value={formatRawBitrate(result.downBps)} />
+                  <Row label="Upload (steady)" value={formatRawBitrate(result.upBps)} />
+                  <Row label="Download p90" value={formatRawBitrate(result.downBpsP90)} />
+                  <Row label="Upload p90" value={formatRawBitrate(result.upBpsP90)} />
+                  <Row label="Download median" value={formatRawBitrate(result.downBpsMedian)} />
+                  <Row label="Median ping" value={`${result.medianLatencyMs.toFixed(2)} ms`} />
+                  <Row label="Latency under load (down)" value={`${result.loadedDownLatencyMs.toFixed(2)} ms`} />
+                  <Row label="Latency under load (up)" value={`${result.loadedUpLatencyMs.toFixed(2)} ms`} />
+                  <Row label="Bufferbloat" value={`${result.bufferbloatMs.toFixed(1)} ms · ${result.bufferbloatGrade}`} />
+                  <Row label="Packet loss" value={`${result.lossPercent.toFixed(1)}%`} />
+                  <Row label="Transferred" value={`${formatBytes(result.bytesDown)} ↓ ${formatBytes(result.bytesUp)} ↑`} />
+                  <Row label="Streams" value={`${result.method.concurrency} parallel`} />
+                </dl>
+                <p className="mt-3 text-[11px] leading-relaxed text-faint">
+                  {formatSpeedExact(result.downBps)} down and {formatSpeedExact(result.upBps)} up, measured as total
+                  bytes ÷ elapsed time over the last {Math.round((1 - result.method.warmupFraction) * 100)}% of each
+                  phase. The first {Math.round(result.method.warmupFraction * 100)}% (TCP slow start) is discarded, and
+                  the p90 figure is what Cloudflare&apos;s test reports.
+                </p>
+              </details>
+            )}
+
             <HistoryPanel history={history} onClear={() => { clearHistory(); setHistory([]); }} />
           </div>
         </div>
@@ -288,6 +327,15 @@ export default function SpeedTest() {
         Measurements run entirely between your browser and this server. Nothing is uploaded or stored.
       </p>
     </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+      <dt className="text-faint">{label}</dt>
+      <dd className="text-mist">{value}</dd>
+    </div>
   );
 }
 

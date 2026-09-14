@@ -1,3 +1,5 @@
+import { CORS_HEADERS, preflight } from '../cors';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -69,16 +71,9 @@ async function lookupGeo(ip?: string): Promise<Geo> {
 }
 
 
-const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'content-type',
-  'access-control-max-age': '86400',
-} as const;
-
 /** The desktop app measures against this API cross-origin. */
 export function OPTIONS() {
-  return new Response(null, { status: 204, headers: { ...CORS, 'cache-control': 'no-store' } });
+  return preflight();
 }
 
 export async function GET(request: Request) {
@@ -99,6 +94,6 @@ export async function GET(request: Request) {
       isp: geo.isp,
       serverTime: Date.now(),
     },
-    { headers: { 'cache-control': 'no-store', 'content-type': 'application/json', ...CORS } },
+    { headers: { 'content-type': 'application/json', ...CORS_HEADERS } },
   );
 }

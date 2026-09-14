@@ -1,6 +1,22 @@
 import { app, ipcMain, BrowserWindow, type BrowserWindow as BrowserWindowType } from 'electron';
-import { CHANNELS, type AdapterInfo, type AppInfo, type NetGaugeSettings, type ViewName, type WindowAction } from '../shared/bridge';
+import {
+  CHANNELS,
+  widgetMetrics,
+  type AdapterInfo,
+  type AppInfo,
+  type SettingsPatch,
+  type ViewName,
+  type WindowAction,
+} from '../shared/bridge';
 import type { SettingsStore } from './settings';
+import type { TaskbarLayout } from './taskbar';
+
+export interface WidgetProbeResult {
+  layout: TaskbarLayout | null;
+  /** Where the widget lands with the *current* settings, in screen coordinates. */
+  rect: { x: number; y: number; width: number; height: number } | null;
+  metrics: { layout: 'card' | 'taskbar'; width: number; height: number };
+}
 
 export interface IpcDeps {
   store: SettingsStore;
@@ -10,14 +26,18 @@ export interface IpcDeps {
   openView: (view: ViewName) => void;
   setLoginItem: (enabled: boolean) => void;
   relaunchWindows: () => void;
+  /** Re-runs the Windows taskbar geometry probe and returns the result. */
+  probeTaskbar: () => Promise<WidgetProbeResult>;
+  /** The widget renderer telling the main process how tall its content is. */
+  widgetResize: (width: number, height: number) => void;
 }
 
 export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(CHANNELS.settingsGet, () => deps.store.get());
 
-  ipcMain.handle(CHANNELS.settingsSet, (_event, patch: Partial<NetGaugeSettings>) =>
-    deps.store.update({ ...deps.store.get(), ...patch } as NetGaugeSettings),
-  );
+  // A deep merge, not `{...current, ...patch}`: a patch that only mentions one
+  // widget key must not reset the rest of that section to its defaults.
+  ipcMain.handle(CHANNELS.settingsSet, (_event, patch: SettingsPatch) => deps.store.patch(patch));
 
   ipcMain.handle(CHANNELS.adapters, () => deps.getAdapters());
 
@@ -36,9 +56,15 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle(CHANNELS.relaunchWindow, () => deps.relaunchWindows());
 
+  ipcMain.handle(CHANNELS.taskbarProbe, () => deps.probeTaskbar());
+
+  ipcMain.handle(CHANNELS.widgetMetrics, () => widgetMetrics(deps.store.get()));
+
+  ipcMain.handle(CHANNELS.widgetResize, (_event, width: number, height: number) => {
+    deps.widgetResize(Number(width) || 0, Number(height) || 0);
+  });
+
   ipcMain.handle(CHANNELS.appInfo, (): AppInfo => {
-    const settings = deps.store.get();
-    void settings;
     return {
       version: app.getVersion(),
       platform: process.platform,
@@ -47,6 +73,7 @@ export function registerIpc(deps: IpcDeps): void {
       node: process.versions.node,
       isPackaged: app.isPackaged,
       simulated: false,
+      settingsError: deps.store.loadError,
     };
   });
 }

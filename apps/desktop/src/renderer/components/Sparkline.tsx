@@ -3,13 +3,17 @@ import type { LiveSample } from '../../shared/bridge';
 interface Props {
   history: LiveSample[];
   height?: number;
+  width?: number;
   referenceBps?: number;
   showUp?: boolean;
 }
 
-/** Live throughput chart drawn straight from the sample ring buffer. */
-export default function Sparkline({ history, height = 64, referenceBps, showUp = true }: Props) {
-  const width = 320;
+/**
+ * Live throughput chart drawn straight from the sample ring buffer. The viewBox is
+ * fixed and `preserveAspectRatio="none"` lets it stretch, so callers only choose a
+ * pixel size — that is what keeps the docked widget's mini chart from distorting.
+ */
+export default function Sparkline({ history, height = 64, width = 320, referenceBps, showUp = true }: Props) {
   const points = history.slice(-120);
   if (points.length < 2) {
     return <div className="ng-panel" style={{ height }} />;

@@ -6,69 +6,23 @@ import { useStore } from '../lib/store';
 import { Row, SectionCard, Select, Slider, TextInput, Toggle } from './controls';
 import type { AdapterInfo, UnitMode } from '../../shared/bridge';
 
-export function WidgetPanel() {
-  const { settings, update, simulated } = useStore();
-  const w = settings.widget;
-  const patch = (partial: Partial<typeof w>) => void update({ widget: { ...w, ...partial } });
-
-  return (
-    <div className="space-y-4">
-      <SectionCard title="Floating widget" description="A compact always-on-top card. Turn it off to keep only the tray icon.">
-        <Row label="Show widget">
-          <Toggle label="Show widget" checked={w.enabled} onChange={(enabled) => patch({ enabled })} />
-        </Row>
-        <Row label="Keep on top">
-          <Toggle label="Keep on top" checked={w.alwaysOnTop} onChange={(alwaysOnTop) => patch({ alwaysOnTop })} />
-        </Row>
-        <Row label="Click-through" hint="Clicks fall through to whatever is underneath.">
-          <Toggle label="Click-through" checked={w.clickThrough} onChange={(clickThrough) => patch({ clickThrough })} />
-        </Row>
-        <Row label="Width">
-          <Slider label="Width" value={w.width} min={220} max={560} onChange={(width) => patch({ width })} format={(v) => `${v}px`} />
-        </Row>
-        <Row label="Scale">
-          <Slider label="Scale" value={w.scale} min={0.7} max={1.8} step={0.05} onChange={(scale) => patch({ scale })} format={(v) => `${Math.round(v * 100)}%`} />
-        </Row>
-        <Row label="Show sparkline">
-          <Toggle label="Show sparkline" checked={w.showSparkline} onChange={(showSparkline) => patch({ showSparkline })} />
-        </Row>
-        <Row label="Show peak">
-          <Toggle label="Show peak" checked={w.showPeak} onChange={(showPeak) => patch({ showPeak })} />
-        </Row>
-        <Row label="Show adapter name">
-          <Toggle label="Show adapter name" checked={w.showAdapter} onChange={(showAdapter) => patch({ showAdapter })} />
-        </Row>
-        <Row label="Position" hint="Drag the widget to move it; the position is remembered.">
-          <button
-            type="button"
-            className="ng-btn no-drag"
-            disabled={simulated}
-            onClick={() => {
-              patch({ position: null });
-              void bridge.openView('widget');
-            }}
-          >
-            {w.position ? `Reset (at ${Math.round(w.position.x)}, ${Math.round(w.position.y)})` : 'Open widget'}
-          </button>
-        </Row>
-      </SectionCard>
-    </div>
-  );
-}
+export { default as WidgetPanel } from './WidgetPanel';
 
 export function MonitorPanel() {
-  const { settings, update, setPaused, sample } = useStore();
+  const { settings, update, setPaused } = useStore();
   const m = settings.monitor;
   const patch = (partial: Partial<typeof m>) => void update({ monitor: { ...m, ...partial } });
   const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
 
+  // Used to depend on `sample?.t`, which re-read every adapter counter once a second
+  // and spawned a fresh PowerShell query each time.
   useEffect(() => {
     let cancelled = false;
     void bridge.getAdapters().then((list) => !cancelled && setAdapters(list));
     return () => {
       cancelled = true;
     };
-  }, [sample?.t]);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -169,12 +123,26 @@ export function BehaviourPanel() {
             format={(v) => `${v}s`}
           />
         </Row>
-        <Row label="Server URL">
+        <Row label="Loaded latency" hint="Probe latency while the line is saturated, to grade bufferbloat.">
+          <Toggle
+            label="Loaded latency"
+            checked={settings.speedTest.measureLoadedLatency}
+            onChange={(measureLoadedLatency) => void update({ speedTest: { measureLoadedLatency } })}
+          />
+        </Row>
+        <Row label="Adaptive request sizes" hint="Keeps every request near one second so the live number is accurate.">
+          <Toggle
+            label="Adaptive request sizes"
+            checked={settings.speedTest.adaptiveChunks}
+            onChange={(adaptiveChunks) => void update({ speedTest: { adaptiveChunks } })}
+          />
+        </Row>
+        <Row label="Server URL" hint="Used when the server choice is “Custom URL”, or alongside “NetGauge server”.">
           <TextInput
             value={settings.speedTest.serverUrl}
-            onChange={(serverUrl) => void update({ speedTest: { ...settings.speedTest, serverUrl } })}
+            onChange={(serverUrl) => void update({ speedTest: { serverUrl } })}
             label="Server URL"
-            placeholder="https://netgauge.app"
+            placeholder="https://your-netgauge-host"
             className="w-56"
           />
         </Row>
@@ -184,7 +152,7 @@ export function BehaviourPanel() {
 }
 
 export function AboutPanel() {
-  const { settings, info, simulated, sample } = useStore();
+  const { settings, info, simulated, sample, update } = useStore();
 
   return (
     <div className="space-y-4">
@@ -205,11 +173,16 @@ export function AboutPanel() {
             {sample.t ? new Date(sample.t).toLocaleTimeString() : '—'} · {formatBytes(sample.rxBytes + sample.txBytes)} this session
           </span>
         </Row>
+        {info?.settingsError && (
+          <Row label="Settings file" hint="The file on disk could not be read, so defaults were loaded.">
+            <span className="text-[0.68rem]" style={{ color: '#fb7185' }}>{info.settingsError}</span>
+          </Row>
+        )}
         <Row label="Settings" hint="Stored as JSON in your user profile.">
           <button
             type="button"
             className="ng-btn no-drag"
-            onClick={() => void bridge.setSettings(DEFAULT_SETTINGS)}
+            onClick={() => void update(DEFAULT_SETTINGS)}
           >
             Reset to defaults
           </button>
