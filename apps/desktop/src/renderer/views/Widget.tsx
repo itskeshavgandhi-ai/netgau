@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { formatLatency, formatSpeed } from '@netgauge/core';
+import { formatSpeed } from '@netgauge/core';
 import { widgetLayoutOf, type NetGaugeSettings } from '../../shared/bridge';
 import Sparkline from '../components/Sparkline';
 import { bridge } from '../lib/bridge';
@@ -27,7 +27,7 @@ function unitScaleOf(settings: NetGaugeSettings): number {
 }
 
 export default function Widget() {
-  const { settings, sample, history, setPaused, lastResult } = useStore();
+  const { settings, sample, history, setPaused } = useStore();
   const material = widgetMaterial(settings);
   const layout = widgetLayoutOf(settings);
   const unit = settings.monitor.unit;
@@ -53,52 +53,26 @@ export default function Widget() {
   }, [layout, settings.widget.showSparkline, settings.widget.showPeak, settings.widget.showAdapter, settings.widget.scale]);
 
   if (layout === 'taskbar') {
+    // Taskbar strip: nothing but the two live numbers. No panel, no chips, no
+    // buttons — it should read like part of the taskbar, not a window on top of it.
     return (
       <div ref={rootRef} className="ng-widget" data-material={material} style={{ borderRadius: 'var(--ng-radius)' }}>
-        <div className="ng-taskbar-strip drag">
-          <span
-            className={paused ? 'h-2 w-2 shrink-0 rounded-full' : 'ng-live-dot h-2 w-2 shrink-0 rounded-full'}
-            style={{ background: paused ? 'var(--ng-faint)' : 'var(--ng-accent)' }}
-            title={paused ? 'Monitoring paused' : 'Monitoring live'}
-          />
-
-          <span className="ng-taskbar-metric ng-widget-readout" title={`Download ${down.text}`}>
-            <span style={{ color: 'var(--ng-accent)', fontSize: '0.8rem' }}>↓</span>
-            <span className="num ng-taskbar-value" style={{ fontSize: '0.95rem' }}>
-              {readout(sample.smoothDownBps, scale)}
-            </span>
-            <span style={{ color: 'var(--ng-muted)', fontSize: '0.62rem' }}>{down.unit}</span>
+        <div className="ng-taskbar-strip drag" title={`Download ${down.text} · Upload ${up.text}${paused ? ' · paused' : ''}`}>
+          <span className="ng-taskbar-metric ng-widget-readout" data-dir="down" style={{ opacity: paused ? 0.5 : 1 }}>
+            <span className="ng-taskbar-arrow" style={{ color: 'var(--ng-accent)' }}>↓</span>
+            <span className="num ng-taskbar-value">{readout(sample.smoothDownBps, scale)}</span>
+            <span className="ng-taskbar-unit">{down.unit}</span>
           </span>
 
-          <span className="ng-divider" />
-
-          <span className="ng-taskbar-metric ng-widget-readout" title={`Upload ${up.text}`}>
-            <span style={{ color: '#a78bfa', fontSize: '0.8rem' }}>↑</span>
-            <span className="num ng-taskbar-value" style={{ fontSize: '0.95rem' }}>
-              {readout(sample.smoothUpBps, scale)}
-            </span>
-            <span style={{ color: 'var(--ng-muted)', fontSize: '0.62rem' }}>{up.unit}</span>
+          <span className="ng-taskbar-metric ng-widget-readout" data-dir="up" style={{ opacity: paused ? 0.5 : 1 }}>
+            <span className="ng-taskbar-arrow" style={{ color: '#a78bfa' }}>↑</span>
+            <span className="num ng-taskbar-value">{readout(sample.smoothUpBps, scale)}</span>
+            <span className="ng-taskbar-unit">{up.unit}</span>
           </span>
-
-          {lastResult && (
-            <>
-              <span className="ng-divider" />
-              <span className="ng-taskbar-metric ng-widget-readout" title="Ping from the last speed test">
-                <span style={{ color: 'var(--ng-faint)', fontSize: '0.62rem' }}>ping</span>
-                <span className="num ng-taskbar-value" style={{ fontSize: '0.72rem' }}>
-                  {formatLatency(lastResult.latencyMs)}
-                </span>
-              </span>
-            </>
-          )}
 
           {settings.widget.showPeak && peak > 0 && (
-            <span
-              className="ng-taskbar-value ng-widget-readout ml-auto"
-              style={{ color: 'var(--ng-faint)', fontSize: '0.6rem' }}
-              title="Peak download this session"
-            >
-              peak {readout(peak, scale)} {down.unit}
+            <span className="ng-taskbar-unit ng-widget-readout ml-auto" title="Peak download this session">
+              peak {readout(peak, scale)}
             </span>
           )}
 
@@ -107,24 +81,6 @@ export default function Widget() {
               <Sparkline history={history} height={24} referenceBps={settings.monitor.referenceMbps * 1e6} width={54} />
             </div>
           )}
-
-          <button
-            type="button"
-            className="no-drag shrink-0"
-            aria-label={paused ? 'Resume monitoring' : 'Pause monitoring'}
-            title={paused ? 'Resume monitoring' : 'Pause monitoring'}
-            onClick={() => void setPaused(!paused)}
-            style={{
-              color: 'var(--ng-muted)',
-              background: 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              fontSize: '0.72rem',
-              lineHeight: 1,
-            }}
-          >
-            {paused ? '▶' : '❚❚'}
-          </button>
         </div>
       </div>
     );

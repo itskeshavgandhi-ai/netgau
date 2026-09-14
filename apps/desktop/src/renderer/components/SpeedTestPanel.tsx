@@ -144,7 +144,12 @@ export default function SpeedTestPanel() {
       setServer(result.server);
     } catch (err) {
       if (!(err instanceof Error && err.name === 'SpeedTestAborted')) {
-        setError(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        setError(
+          /failed to fetch|networkerror|load failed/i.test(message)
+            ? `Could not reach ${base.label} (${base.baseUrl || 'this page'}). Check your connection, or pick another server below.`
+            : message,
+        );
       }
       setProgress(null);
     } finally {

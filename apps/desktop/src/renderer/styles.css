@@ -376,23 +376,48 @@ body[data-view='widget'] {
 .ng-taskbar-strip {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.9rem;
   height: 100%;
-  padding: 0 0.6rem;
+  padding: 0 0.5rem;
   white-space: nowrap;
   cursor: default;
+  font-family: var(--ng-font-display), var(--ng-font-ui), system-ui, sans-serif;
 }
 
 .ng-taskbar-metric {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.22rem;
+  gap: 0.28rem;
   line-height: 1;
 }
 
+.ng-taskbar-arrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+
 .ng-taskbar-value {
+  font-family: var(--ng-font-display), var(--ng-font-ui), system-ui, sans-serif;
+  font-size: 0.98rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  color: var(--ng-ink);
+}
+
+.ng-taskbar-unit {
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ng-muted);
+}
+
+/* Transparent strip over a taskbar: a crisp text shadow keeps the numbers legible
+   over light *and* dark taskbars without painting a panel behind them. */
+.ng-widget[data-material='transparent'] .ng-taskbar-value {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 8px rgb(0 0 0 / 0.45);
 }
 
 .ng-divider {

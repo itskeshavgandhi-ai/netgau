@@ -220,3 +220,22 @@ describe('SettingsStore patching', () => {
     expect(sanitizeSettings({ speedTest: { server: 'carrier-pigeon' } }).speedTest.server).toBe('auto');
   });
 });
+
+describe('migrate (text-only taskbar strip)', () => {
+  it('turns off the old default extras once and marks the file', async () => {
+    const { migrate } = await import('../src/main/settings');
+    const old = { widget: { showSparkline: true, showPeak: true, showAdapter: true, width: 300 } };
+    const out = migrate(old) as { widget: Record<string, unknown>; widgetStyle: number };
+    expect(out.widget.showSparkline).toBe(false);
+    expect(out.widget.showPeak).toBe(false);
+    expect(out.widget.showAdapter).toBe(false);
+    expect(out.widget.width).toBe(210);
+    expect(out.widgetStyle).toBe(2);
+  });
+
+  it('leaves an already-migrated file alone', async () => {
+    const { migrate } = await import('../src/main/settings');
+    const done = { widgetStyle: 2, widget: { showSparkline: true, showPeak: true, showAdapter: true, width: 300 } };
+    expect(migrate(done)).toBe(done);
+  });
+});
