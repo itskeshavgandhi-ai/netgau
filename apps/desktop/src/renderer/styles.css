@@ -102,8 +102,6 @@ body[data-simulated='true']:not([data-view='widget']) {
       rgb(var(--ng-hairline) / calc(0.05 * var(--ng-surface-alpha))) 100%
     ),
     rgb(var(--ng-base) / var(--ng-surface-alpha));
-  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
-  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
   border: 1px solid rgb(var(--ng-hairline) / 0.1);
   box-shadow:
     0 1px 0 0 rgb(var(--ng-hairline) / 0.08) inset,
@@ -111,13 +109,21 @@ body[data-simulated='true']:not([data-view='widget']) {
   overflow: hidden;
 }
 
+/* The blur only makes sense when something shows through. The Studio is opaque, so
+   running a full-window backdrop blur there was pure GPU cost — on machines without
+   hardware acceleration it made the whole window stutter. Only the browser preview
+   (which sits on a gradient) and the widget keep it. */
+body[data-simulated='true'] .ng-surface {
+  backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--ng-blur)) saturate(170%);
+}
+
 .ng-surface::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: calc(var(--ng-noise) * 0.35);
-  mix-blend-mode: overlay;
+  opacity: calc(var(--ng-noise) * 0.18);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
@@ -136,9 +142,10 @@ body[data-simulated='true']:not([data-view='widget']) {
   inset: -30% -10% auto -10%;
   height: 70%;
   pointer-events: none;
-  background: radial-gradient(60% 60% at 50% 0%, var(--ng-accent), transparent 70%);
-  opacity: calc(var(--ng-glow) * 0.22);
-  filter: blur(30px);
+  /* A soft gradient instead of `filter: blur()`: a blurred 70%-height layer was
+     re-rasterised on every live-sample re-render. */
+  background: radial-gradient(60% 60% at 50% 0%, var(--ng-accent) 0%, transparent 65%);
+  opacity: calc(var(--ng-glow) * 0.2);
 }
 
 .drag {

@@ -56,12 +56,26 @@ export function parseCounterBlock(block: string): IfaceCounters[] {
   return out;
 }
 
+/**
+ * Counters come from the .NET `NetworkInterface` API rather than the
+ * `Get-NetAdapterStatistics` cmdlet. The cmdlet goes through WMI/CIM and costs
+ * 150–400 ms of CPU per call — at a 1 s sample rate that pegged a core and made the
+ * whole app feel hung on modest laptops. The .NET call returns in a few ms.
+ */
 const POWERSHELL_LOOP = (intervalMs: number) => `
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$sb = New-Object System.Text.StringBuilder
 while ($true) {
-  Get-NetAdapterStatistics | ForEach-Object { "{0}\`t{1}\`t{2}" -f $_.Name, $_.ReceivedBytes, $_.SentBytes }
-  '${BLOCK_MARKER}'
+  [void]$sb.Clear()
+  foreach ($nic in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+    if ($nic.NetworkInterfaceType -eq 'Loopback') { continue }
+    $st = $nic.GetIPStatistics()
+    [void]$sb.Append($nic.Name).Append([char]9).Append($st.BytesReceived).Append([char]9).Append($st.BytesSent).Append([char]10)
+  }
+  [void]$sb.Append('${BLOCK_MARKER}')
+  [Console]::Out.WriteLine($sb.ToString())
+  [Console]::Out.Flush()
   Start-Sleep -Milliseconds ${Math.max(100, Math.round(intervalMs))}
 }`;
 
@@ -76,6 +90,7 @@ export function createWindowsReader(intervalMs: number): CounterReader {
   let pending: ((counters: IfaceCounters[]) => void) | null = null;
   const queue: IfaceCounters[][] = [];
   let disposed = false;
+  let crashes = 0;
 
   const start = () => {
     if (disposed) return;
@@ -102,8 +117,10 @@ export function createWindowsReader(intervalMs: number): CounterReader {
     });
     child.on('exit', () => {
       child = null;
-      // Restart after a crash so monitoring survives a PowerShell hiccup.
-      if (!disposed) setTimeout(start, 1000);
+      // Restart after a crash so monitoring survives a PowerShell hiccup — with
+      // back-off, so a broken PowerShell cannot be respawned once a second forever.
+      crashes += 1;
+      if (!disposed) setTimeout(start, Math.min(30_000, 1000 * 2 ** Math.min(crashes, 5)));
     });
     child.on('error', () => {
       child = null;
@@ -113,7 +130,7 @@ export function createWindowsReader(intervalMs: number): CounterReader {
   start();
 
   return {
-    kind: 'Windows · Get-NetAdapterStatistics',
+    kind: 'Windows · .NET NetworkInterface',
     read() {
       const queued = queue.shift();
       if (queued) return Promise.resolve(queued);

@@ -213,7 +213,12 @@ if (!gotLock) {
       onSample: broadcastSample,
     });
 
-    await dock.refresh(true);
+    // Do NOT await the taskbar probe here. On Windows it spawns PowerShell + UI
+    // Automation and can take several seconds; blocking on it meant no tray icon and
+    // no window until it finished, which looked like the app had hung on launch.
+    // The cheap work-area estimate is applied synchronously and the real probe
+    // refines the widget position when it lands.
+    dock.seed();
 
     tray = new NetGaugeTray(settings, {
       openStudio: () => openView('studio'),
@@ -260,18 +265,31 @@ if (!gotLock) {
       widgetResize: (width, height) => widget.resizeToContent(width, height),
     });
 
+    // Dragging a slider in Studio fires a settings change per frame. Rebuilding a
+    // native menu and re-laying-out the widget window on every one of them is what
+    // made the whole app stutter while adjusting settings, so both are coalesced.
+    let menuTimer: ReturnType<typeof setTimeout> | null = null;
+    let applyTimer: ReturnType<typeof setTimeout> | null = null;
     store.onChange((next) => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.send(CHANNELS.settingsChanged, next);
       }
-      widget.apply(next);
       sampler.setOptions({
         intervalMs: next.monitor.sampleMs,
         adapter: next.monitor.adapter,
         includeVirtual: next.monitor.includeVirtual,
         smoothing: next.monitor.smoothing,
       });
-      tray?.rebuildMenu();
+      if (applyTimer) clearTimeout(applyTimer);
+      applyTimer = setTimeout(() => {
+        applyTimer = null;
+        widget.apply(settings());
+      }, 40);
+      if (menuTimer) clearTimeout(menuTimer);
+      menuTimer = setTimeout(() => {
+        menuTimer = null;
+        tray?.rebuildMenu();
+      }, 200);
     });
 
     // Restore the login-item state so the tray checkbox is never a lie.
