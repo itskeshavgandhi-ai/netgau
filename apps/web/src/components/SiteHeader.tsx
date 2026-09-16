@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 
 const NAV = [
@@ -88,17 +88,19 @@ export default function SiteHeader() {
 }
 
 export function Logo({ className }: { className?: string }) {
+  const gid = useId();
+  const gradId = `ng-logo-${gid.replace(/:/g, '')}`;
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
       <defs>
-        <linearGradient id="ng-logo" x1="0" y1="1" x2="1" y2="0">
+        <linearGradient id={gradId} x1="0" y1="1" x2="1" y2="0">
           <stop offset="0%" stopColor="#22d3ee" />
           <stop offset="100%" stopColor="#a78bfa" />
         </linearGradient>
       </defs>
       <rect x="1" y="1" width="30" height="30" rx="9" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" />
-      <path d="M6 21.5a10.5 10.5 0 0 1 20 0" fill="none" stroke="url(#ng-logo)" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M16 21.5 22 12" stroke="url(#ng-logo)" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M6 21.5a10.5 10.5 0 0 1 20 0" fill="none" stroke={`url(#${gradId})`} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M16 21.5 22 12" stroke={`url(#${gradId})`} strokeWidth="2.2" strokeLinecap="round" />
       <circle cx="16" cy="21.5" r="2.2" fill="#eaf0ff" />
     </svg>
   );

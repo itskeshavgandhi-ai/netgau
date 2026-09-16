@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   formatBytes,
   formatLatency,
@@ -55,6 +55,7 @@ export default function SpeedTest() {
   const [copied, setCopied] = useState(false);
   const handleRef = useRef<SpeedTestHandle | null>(null);
   const seriesRef = useRef<number[]>([]);
+  const sparkId = useId().replace(/:/g, '');
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -77,8 +78,12 @@ export default function SpeedTest() {
     setLive({ down: p.downBps, up: p.upBps });
     const active = p.phase === 'upload' ? p.upBps : p.downBps;
     if (p.phase === 'download' || p.phase === 'upload') {
-      seriesRef.current = [...seriesRef.current.slice(-119), active];
-      setSeries(seriesRef.current);
+      const s = seriesRef.current;
+      // Mutate in place then set a new array reference; avoids allocating a fresh
+      // array on every 100 ms tick and keeps garbage down during the test.
+      if (s.length >= 120) s.splice(0, s.length - 119);
+      s.push(active);
+      setSeries([...s]);
     }
   }, []);
 
@@ -231,7 +236,7 @@ export default function SpeedTest() {
             </div>
 
             <div className="mt-4 h-11 w-full max-w-[320px]">
-              {series.length > 1 && <Sparkline values={series} className="h-full w-full" />}
+              {series.length > 1 && <Sparkline values={series} className="h-full w-full" gradientId={`live-spark-${sparkId}`} />}
             </div>
           </div>
 
@@ -405,7 +410,7 @@ function HistoryPanel({ history, onClear }: { history: TestRecord[]; onClear: ()
               width={70}
               height={26}
               className="h-6 w-16 shrink-0 opacity-70"
-              gradientId={`spark-${r.id}`}
+              gradientId={`spark-${r.at}-${r.id}`}
             />
           </li>
         ))}
