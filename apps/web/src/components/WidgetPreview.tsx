@@ -1,5 +1,12 @@
+'use client';
+
+import { useId } from 'react';
+
 /** Static, dependency-free preview of the desktop widget — no screenshots to keep stale. */
 export default function WidgetPreview() {
+  const gid = useId();
+  const strokeId = `preview-stroke-${gid.replace(/:/g, '')}`;
+  const fillId = `preview-fill-${gid.replace(/:/g, '')}`;
   return (
     <div className="relative mx-auto w-full max-w-md">
       <div className="glass rounded-[22px] p-4 shadow-[0_40px_120px_-40px_rgba(34,211,238,0.35)]">
@@ -39,23 +46,23 @@ export default function WidgetPreview() {
 
         <svg viewBox="0 0 220 44" className="mt-4 h-11 w-full" preserveAspectRatio="none" aria-hidden>
           <defs>
-            <linearGradient id="preview-stroke" x1="0" y1="0" x2="1" y2="0">
+            <linearGradient id={strokeId} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#22d3ee" />
               <stop offset="100%" stopColor="#a78bfa" />
             </linearGradient>
-            <linearGradient id="preview-fill" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.35" />
               <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path
             d="M0 34 L18 30 L36 32 L54 22 L72 26 L90 14 L108 19 L126 10 L144 16 L162 8 L180 13 L198 6 L220 11 L220 44 L0 44 Z"
-            fill="url(#preview-fill)"
+            fill={`url(#${fillId})`}
           />
           <path
             d="M0 34 L18 30 L36 32 L54 22 L72 26 L90 14 L108 19 L126 10 L144 16 L162 8 L180 13 L198 6 L220 11"
             fill="none"
-            stroke="url(#preview-stroke)"
+            stroke={`url(#${strokeId})`}
             strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"

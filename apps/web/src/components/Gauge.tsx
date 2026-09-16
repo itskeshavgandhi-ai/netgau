@@ -21,16 +21,23 @@ const STROKE = 13;
 const CENTER = 100;
 const VIEW = 200;
 
+/** Round to 2 decimal places so SSR and client produce identical numbers
+ *  (floating-point differences across Node/V8 versions are the #1 cause of
+ *  hydration mismatches in SVG gauges). */
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function polar(radius: number, angleDeg: number) {
   const rad = (angleDeg * Math.PI) / 180;
-  return { x: CENTER + radius * Math.cos(rad), y: CENTER + radius * Math.sin(rad) };
+  return { x: round(CENTER + radius * Math.cos(rad)), y: round(CENTER + radius * Math.sin(rad)) };
 }
 
 function arcPath(radius: number, fromDeg: number, toDeg: number) {
   const a = polar(radius, fromDeg);
   const b = polar(radius, toDeg);
   const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
-  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${radius} ${radius} 0 ${large} 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+  return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${large} 1 ${b.x} ${b.y}`;
 }
 
 /** Log scale, like Speedtest: 1 Mbps → 1 Gbps across the sweep. */
@@ -66,7 +73,7 @@ export default function Gauge({ valueBps, progress = 0, phase = 'idle', children
 
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[min(78vw,360px)] sm:max-w-[380px]">
-      <svg viewBox={`0 0 ${VIEW} ${VIEW}`} className="h-full w-full -rotate-0" role="img" aria-label="Speed gauge">
+      <svg viewBox={`0 0 ${VIEW} ${VIEW}`} className="h-full w-full" role="img" aria-label="Speed gauge">
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#22d3ee" />
